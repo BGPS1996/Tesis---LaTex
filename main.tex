@@ -1,0 +1,78 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% \documentclass[12pt,papel,twoside]{unrnpfi}
+\documentclass[12pt,screen,twoside,pagebackref]{unrnpfi}
+% \documentclass[12pt,papel,singlespace,oneside]{unrnpfi}
+% \documentclass[12pt,papel,preprint,singlespace,oneside]{unrnpfi}
+
+
+%%%%%%%%%%%%%%%%%%%%% Paquetes extra %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Por conveniencia: aqu\'{\i} puede cargar todos los paquetes y definir los comandos 
+% que necesite
+\usepackage{unrnextra}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%
+\palabrasclave{Formato de PFI, Plantilla, Universidad Nacional de Río Negro}
+\keywords{PFI format, Templates, Universidad Nacional de Río Negro}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%\titlepagefalse % Si no quiere compilar la portada descomente esta linea
+%\includeonly{apendices} % Compilar s\'{o}lo estos archivos 
+\graphicspath{{figs/}} % Lugar donde encontrar las figuras generales (se puede poner uno en cada cap{\'{\i}}tulo)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\begin{document}
+
+% Dentro del environment 'preliminary' va:
+% la dedicatoria, resumen, abstract, indices
+
+\begin{preliminary}
+
+% Escriba su dedicatoria
+\dedicatoria{
+A mi familia\\
+A mis amigos\\
+A todos los que me conocen\\
+A toda esa otra gente que no
+}
+
+%%% \'{I}ndices %%%%
+
+\begin{abreviaturas}
+UNRN: Universidad Nacional de Río Negro.\\
+PFI: Proyecto Final Integrador.
+\end{abreviaturas}
+
+\tableofcontents                %\'{I}ndice
+
+\listoffigures                  %Figuras
+
+\listoftables                   %Tablas
+
+\include{resumen}
+
+\end{preliminary}
+
+
+% Podemos usar cualquiera de los dos comandos: \input o \include para incluir el texto
+\input{cap1}
+\include{cap2}
+\include{cap3}
+
+\appendix
+\include{apend1}
+
+\begin{biblio}
+\bibliography{mibib}
+\end{biblio}
+
+\begin{postliminary}
+
+\begin{seccion}{Agradecimientos}
+A todos los que se lo merecen, por merecerlo.
+\end{seccion}
+
+\end{postliminary}
+
+\end{document}
+
