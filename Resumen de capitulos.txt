@@ -1,0 +1,7 @@
+Capitulo 1: Introduccion:
+	- Planteamiento de problema.
+	- Solucion propuesta.
+	- Objetivos:
+		- Objetivo GRAL.
+		- Objetivo Especificos.
+	- Estructura del documento.
