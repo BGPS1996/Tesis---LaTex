@@ -1,95 +1,94 @@
-\chapter{Algunos ejemplos y usos}
+\chapter{Marco teorico}
+\label{ch:marco_teorico}
 \graphicspath{{figs/}}
 
-\chapterquote{Que mira bobo}{Lionel Messi, 2023}
-
-\label{C:algunos-ejemplos-y-usos}
 
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section{Uso de listas}
-\label{S:uso-de-listas}
+% -------------------------------------------------------------
+% SECCIÓN 1: Fundamentos del Problema
+% -------------------------------------------------------------
+\section{Sistemas de Tiempo Real y Trazabilidad}
+\label{sec:sistemas_tiempo_real}
 
-El problema de la medida se puede describir informalmente del siguiente modo \cite{Bohr1913PMp10}
+Este apartado establece el contexto y la necesidad de la investigación, justificando por qué la medición temporal es crítica en el campo de aplicación. Este apartado lo voy a llenar con Charlie, dado que tambien quiero tener mas información de como fue impulsado el trabajo.
 
-\begin{enumerate}
-    \item hola 1.
-        \begin{itemize}
-          \item Item 1
-          \item Item 2
-        \end{itemize}
-    \item hola 2.
-        \begin{description}
-            \item[Item 1:] Descripcion Item 1
-            \item[Item 2:] Descripcion Item 2
-        \end{description}
-    \item hola 3 (ver notas a continuaci\'{o}n) \cite{Bohm1952PRp166,Bohm1952PRp180}:
-        \begin{enumerate}
-        \item hola a.
-        \item hola b.
-        \item hola c.
-        \end{enumerate}
-        
-\end{enumerate}
+\subsection{Definición de Sistemas de Tiempo Real (STR)}
+\label{ssec:definicion_str}
+% Definición, tipos (hard, soft), y la importancia del determinismo.
 
+\subsection{El Problema de la Medición de Latencia (Intrusión)}
+\label{ssec:problema_latencia}
+% Explicar por qué los métodos de software son insuficientes (efecto de intrusión) y la necesidad de soluciones de bajo nivel.
 
-\section{Uso de Imagenes}
-\label{S:uso-de-imagenes}
-Como incluir una imagen:\\
-\begin{figure}[!ht]
-\centering\includegraphics[width=\imsize]{cap2_f1}
-\caption[La figura muestra algunas curvas m\'{a}s o menos lindas]{La figura muestra algunas curvas m\'{a}s o menos lindas. El gr\'{a}fico est\'{a} en coordenadas porlares como se muestra en la ref.~\protect{\cite{Hunter07CSE}}}
-\end{figure}
+% -------------------------------------------------------------
+% SECCIÓN 2: Plataforma de Hardware: FPGA y Arquitectura Zynq
+% -------------------------------------------------------------
+\section{Arquitectura Heterogénea en Sistemas de Lógica Programable}
+\label{sec:arquitectura_fpga}
 
-\section{Uso de Ecucaciones}
-\label{S:uso-de-ecuaciones}
-En la primera ecuaci\'{o}n
-\begin{equation}
-\phi_{1}(z)=A_{1}e^{ik_{1}z}+B_{1}e^{-ik_{1}z}.
-\end{equation}
+Se describe la plataforma física sobre la que se implementará la solución, detallando la interconexión PS-PL.
 
-En la segunda ecuaci\'{o}n:
-\begin{equation}
-\phi_{2}(z)=A_{2}e^{ik_{2}z}+B_{2}e^{-ik_{2}z}.
-\end{equation}
+\subsection{Fundamentos de Field-Programmable Gate Arrays (FPGA)}
+\label{ssec:fundamentos_fpga}
+% Brevemente la tecnología: Lógica Programable (PL) vs. Processing System (PS).
 
-\section{Uso de código}
-\label{S:uso-de-codigo}
+\subsection{Arquitectura System-on-Chip (SoC) Zynq}
+\label{ssec:arquitectura_zynq}
+% Detalle de la interconexión PS-PL, el ARM embebido y su rol como plataforma anfitriona.
+% Incluir la Figura 1 (esquema general de la placa) si no se incluyó en la Introducción.
 
-Podemos agregar lineas de código\footnote{\url{https://www.overleaf.com/learn/latex/Code_Highlighting_with_minted}}:
-\begin{center}
-    \begin{minted}{python}
-        for n in range(10):
-        if n%2:
-        print n
-    \end{minted}
-\end{center}
+\subsection{Uso de Linux en el Processing System (PS)}
+\label{ssec:linux_ps}
+% Justificación del uso de Linux para recepción, procesamiento y almacenamiento de datos.
 
-También podemos importar código:
-\inputminted{python}{cods/holamundo.py}
+% -------------------------------------------------------------
+% SECCIÓN 3: La Unidad Bajo Prueba y la Interconexión
+% -------------------------------------------------------------
+\section{Procesadores Soft-Core y Protocolo de Comunicación}
+\label{sec:softcore_comunicacion}
 
-\section{Uso de circuitikz}
-\label{S:uso-de-circuitikz}
-Para dibujar circuitos podemos usar Ciruitikz\footnote{\url{https://www.overleaf.com/learn/latex/CircuiTikz_package}}
+Se centra en la unidad que genera los eventos y el medio por el cual se transfieren.
 
-\begin{figure}[!ht]
-    \centering
-    \shorthandoff{<>}
-    	\begin{circuitikz}[european voltages] \draw
-    		(0,0) to [short, *-] (6,0)
-                to [V, l_=$\mathrm{j}{\omega}_m \underline{\psi}^s_R$] (6,2) 
-                to [R, l_=$R_R$] (6,4) 
-                to [short, i_=$\underline{i}^s_R$] (5,4) 
-                (0,0) to [open, v^>=$\underline{u}^s_s$] (0,4) 
-                to [short, *- ,i=$\underline{i}^s_s$] (1,4) 
-                to [R, l=$R_s$] (3,4)
-                to [L, l=$L_{\sigma}$] (5,4) 
-                to [short, i_=$\underline{i}^s_M$] (5,3) 
-                to [L, l_=$L_M$] (5,0);
-    	\end{circuitikz}
-    \shorthandon{<>}
-    \caption{Hola este es el caption del circuito\label{f:ModeloCircuito}}
-\end{figure}
+\subsection{Procesador Soft-Core RISC-V}
+\label{ssec:riscv}
+% Introducción al ISA RISC-V.
+% Requisitos para la síntesis en PL: acceso a registros (PC) y generación de señales de evento.
+
+\subsection{Protocolo Advanced eXtensible Interface (AXI)}
+\label{ssec:protocolo_axi}
+% Explicar AXI como estándar de comunicación eficiente (Master/Slave) entre los bloques de hardware.
+
+% -------------------------------------------------------------
+% SECCIÓN 4: El Core Técnico del Reporter
+% -------------------------------------------------------------
+\section{Técnicas de Trazabilidad y Asignación Temporal (Timestamping)}
+\label{sec:timestamping}
+
+Este es el segmento más importante, ya que sustenta el mecanismo propuesto por tu Módulo Reporter.
+
+\subsection{Mecanismos de Trazado de Eventos (Event Tracing)}
+\label{ssec:event_tracing}
+% Definición de qué constituye un "evento" de CPU (instrucción, interrupción, acceso).
+
+\subsection{Generación de Marcas Temporales (Timestamps) en Hardware}
+\label{ssec:generacion_timestamps}
+% Cómo se genera un timestamp (contadores de clock).
+% Análisis de la precisión y tolerancia requerida para STR.
+
+\subsection{Problemas de Sincronización entre Dominios de Clock}
+\label{ssec:sincronizacion_clock}
+% Discusión sobre cómo asegurar la coherencia temporal al transferir datos entre el dominio del soft-core (PL) y el dominio del ARM (PS).
+% Esto sustenta la necesidad de la "señal de referencia" de la hipótesis.
+
+% -------------------------------------------------------------
+% SECCIÓN 5: Antecedentes (Opcional, pero recomendable)
+% -------------------------------------------------------------
+\section{Trabajos Relacionados y Antecedentes}
+\label{sec:trabajos_relacionados}
+
+\subsection{Herramientas de Debugging y Trazado Existentes}
+\label{ssec:herramientas_existentes}
+% Breve revisión crítica de soluciones comerciales o académicas similares, y cómo tu Módulo Reporter se diferencia/mejora estas soluciones.
 
 %%% Local Variables: 
 %%% mode: latex

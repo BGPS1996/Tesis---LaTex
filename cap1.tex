@@ -37,11 +37,22 @@ Diseñar un setup que sea capaz de trackear registros de interes, permitiendo co
 \item Evaluar el desempeño del sistema implementado, midiendo métricas como latencia de comunicación, capacidad de respuesta y confiabilidad en la captura de eventos.
 \end{itemize}
 
-\section{Estructura del documento}
-\label{S:otras-opciones}
-Otras opciones con las que se cargue el estilo se pasan directamente a los estilos usados. Por ejemplo si usamos:\\
-\verb|\documentclass[11pt,screen,oneside,preprint,draft,pagebackref]{unrnpfi}|\\
-producir\'{a} un documento con letra de menor tama\~{n}o (11pt), no se procesar\'{a}n los gr\'{a}ficos (draft) para una mayor velocidad, se producir\'{a}n links en el archivo pdf con la caracter\'{\i}stica adicional que las referencias tendr\'{a}n un link al lugar donde fueron citadas ya que la opci\'{o}n \verb|pagebackref| se pasa al paquete \verb|\hyperref|.
+\section{Estructura del Documento}
+\label{S:estructura-documento}
+
+El presente Proyecto Final Integrador se estructura en capítulos que describen el desarrollo, la implementación y la validación del sistema HR-RT-Reporter:
+
+\begin{itemize}
+    \item \textbf{Capítulo 1. Introducción:} Presenta el planteamiento del problema, la justificación, la solución propuesta, la hipótesis de trabajo, los objetivos y la estructura general del documento.
+    
+    \item \textbf{Capítulo 2. Marco Teórico:} Sistematiza la información técnica necesaria, incluyendo la revisión de literatura, la investigación sobre arquitecturas FPGA-ARM, el estudio de la precisión de los \textit{timestamps} y la selección del \textit{soft-core} y el sistema operativo.
+    
+    \item \textbf{Capítulo 3. Metodología y Diseño:} Detalla el enfoque metodológico, la síntesis del procesador \textit{soft-core}, la configuración del sistema operativo Linux y el diseño del Módulo Reporter (hardware y lógica de gestión de eventos).
+    
+    \item \textbf{Capítulo 4. Implementación y Resultados:} Describe la integración del sistema completo y presenta la ejecución de pruebas de laboratorio. Incluye la evaluación del desempeño, la velocidad de respuesta y la confiabilidad en la comunicación.
+    
+    \item \textbf{Capítulo 5. Conclusiones y Trabajo Futuro:} Recapitula los resultados obtenidos, establece el grado de verificación de la hipótesis, determina el cumplimiento de los objetivos y sugiere líneas de investigación y desarrollo futuras.
+\end{itemize}
 
 %%% Local Variables: 
 %%% mode: latex
