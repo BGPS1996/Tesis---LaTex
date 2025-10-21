@@ -14,11 +14,40 @@ Este apartado establece el contexto y la necesidad de la investigación, justifi
 
 \subsection{Definición de Sistemas de Tiempo Real (STR)}
 \label{ssec:definicion_str}
+
+Un \textbf{Sistema de Tiempo Real (STR)} es aquel cuya corrección no depende únicamente de la precisión lógica del resultado de un cómputo, sino también del \textbf{momento exacto en que dicho resultado se produce}. En estos sistemas, el cumplimiento de las restricciones temporales (\textit{deadlines}) es un factor crucial. La gravedad del fallo al no cumplir con estas restricciones da lugar a dos clasificaciones principales:
+
+\begin{itemize}
+    \item \textbf{Sistema de Tiempo Real Estricto (\textit{Hard Real-Time}):} En estos sistemas, las restricciones temporales son de máxima prioridad. El \textbf{incumplimiento de una fecha límite se considera un fallo} del sistema. Un retraso, por mínimo que sea, puede tener consecuencias de fiabilidad.
+    
+    \item \textbf{Sistema de Tiempo Real Flexible (\textit{Soft Real-Time}):} El incumplimiento ocasional de una fecha límite es indeseable y degrada el rendimiento o la calidad del servicio, pero \textbf{no conduce a un fallo total} del sistema. En este caso, el valor del resultado disminuye después de su \textit{deadline}, pero el sistema puede tolerar las violaciones ocasionales.
+\end{itemize}
+\cite{liu2006real}
+
+
+
+
+Dado que el objetivo del presente proyecto es evaluar el desempeño de un programa con la máxima precisión posible, el mecanismo de trazabilidad desarrollado debe aspirar a la fiabilidad de un entorno \textit{Hard Real-Time}. Esto requiere garantizar la \textbf{predictibilidad} y la \textbf{mínima intrusión} de la herramienta de medición.
 % Definición, tipos (hard, soft), y la importancia del determinismo.
 
-\subsection{El Problema de la Medición de Latencia (Intrusión)}
+\subsection{Necesidad de la Trazabilidad Temporal (\textit{Tracing}) y el Problema de la Intrusión}
 \label{ssec:problema_latencia}
-% Explicar por qué los métodos de software son insuficientes (efecto de intrusión) y la necesidad de soluciones de bajo nivel.
+
+La evaluación del desempeño de cualquier STR requiere medir con precisión los \textbf{tiempos de respuesta} y los \textbf{intervalos de tiempo} entre eventos de interés del sistema. Este proceso de medición se conoce como \textbf{trazabilidad} o \textit{tracing}, y consiste en registrar la secuencia de eventos del programa junto con una marca temporal (\textit{timestamp}) asociada a cada uno.
+
+El principal desafío metodológico en la trazabilidad de STR es el \textbf{Efecto Sonda} o \textbf{Intrusión de la Medición} (\textit{probe effect}). Este fenómeno ocurre cuando la herramienta utilizada para la medición afecta el comportamiento temporal del sistema que se está observando.
+
+Un ejemplo de esta limitación se evidenció en proyectos antecesor que empleaban técnicas de \textit{debugging} para la trazabilidad. Estos enfoques se basaban en la interrupción del tiempo de ejecución del procesador para generar las marcas temporales, resultando en un método altamente intrusivo y, por ende, \textbf{no fiable} para la medición de sistemas deterministas.
+
+Las técnicas de trazabilidad basadas en \textbf{software} (como la inserción de llamadas a funciones de registro o contadores en el código del programa) son inherentemente intrusivas debido a dos razones principales:
+\begin{enumerate}
+    \item \textbf{Alteración de la Temporización:} La ejecución del código de registro consume tiempo de CPU y recursos de memoria, añadiendo una latencia variable que altera la secuencia temporal original del programa.
+    \item \textbf{Distorsión del Contexto:} El código de instrumentación puede modificar el uso de la caché o la jerarquía de memoria, lo que cambia las condiciones bajo las cuales el programa se ejecutaría normalmente.
+\end{enumerate}
+
+Para sistemas que aspiran a la predictibilidad de un entorno \textit{Hard Real-Time}, esta alteración es inaceptable, ya que invalida los resultados de la medición.
+
+Por lo tanto, la solución propuesta en este proyecto es el desarrollo del \textbf{Módulo Reporter}, una herramienta de \textbf{trazabilidad basada en hardware} implementada en la Lógica Programable (PL) de la FPGA. Al operar de manera paralela y asíncrona al procesador bajo prueba (\textit{soft-core}), el Módulo Reporter minimiza la intrusión y se espera obtener \textit{timestamps} de alta fidelidad, superando las limitaciones impuestas por las técnicas de instrumentación basadas en software.
 
 % -------------------------------------------------------------
 % SECCIÓN 2: Plataforma de Hardware: FPGA y Arquitectura Zynq
