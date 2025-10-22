@@ -10,25 +10,22 @@
 \section{Sistemas de Tiempo Real y Trazabilidad}
 \label{sec:sistemas_tiempo_real}
 
-Este apartado establece el contexto y la necesidad de la investigación, justificando por qué la medición temporal es crítica en el campo de aplicación. Este apartado lo voy a llenar con Charlie, dado que tambien quiero tener mas información de como fue impulsado el trabajo.
-
+Este apartado establece el contexto y la necesidad de la investigación, justificando por qué la medición temporal es crítica en el campo de aplicación.
 \subsection{Definición de Sistemas de Tiempo Real (STR)}
 \label{ssec:definicion_str}
 
 Un \textbf{Sistema de Tiempo Real (STR)} es aquel cuya corrección no depende únicamente de la precisión lógica del resultado de un cómputo, sino también del \textbf{momento exacto en que dicho resultado se produce}. En estos sistemas, el cumplimiento de las restricciones temporales (\textit{deadlines}) es un factor crucial. La gravedad del fallo al no cumplir con estas restricciones da lugar a dos clasificaciones principales:
 
 \begin{itemize}
-    \item \textbf{Sistema de Tiempo Real Estricto (\textit{Hard Real-Time}):} En estos sistemas, las restricciones temporales son de máxima prioridad. El \textbf{incumplimiento de una fecha límite se considera un fallo} del sistema. Un retraso, por mínimo que sea, puede tener consecuencias de fiabilidad.
+  \item \textbf{Sistema de Tiempo Real Estricto (\textit{Hard Real-Time}):} En estos sistemas, las restricciones temporales son de máxima prioridad. El \textbf{incumplimiento de una fecha límite se considera un fallo} del sistema. Un retraso, por mínimo que sea, puede tener consecuencias de fiabilidad.
     
-    \item \textbf{Sistema de Tiempo Real Flexible (\textit{Soft Real-Time}):} El incumplimiento ocasional de una fecha límite es indeseable y degrada el rendimiento o la calidad del servicio, pero \textbf{no conduce a un fallo total} del sistema. En este caso, el valor del resultado disminuye después de su \textit{deadline}, pero el sistema puede tolerar las violaciones ocasionales.
+  \item \textbf{Sistema de Tiempo Real Flexible (\textit{Soft Real-Time}):} El incumplimiento ocasional de una fecha límite es indeseable y degrada el rendimiento o la calidad del servicio, pero \textbf{no conduce a un fallo total} del sistema. En este caso, el valor del resultado disminuye después de su \textit{deadline}, pero el sistema puede tolerar las violaciones ocasionales.
 \end{itemize}
 \cite{liu2006real}
 
 
-
-
 Dado que el objetivo del presente proyecto es evaluar el desempeño de un programa con la máxima precisión posible, el mecanismo de trazabilidad desarrollado debe aspirar a la fiabilidad de un entorno \textit{Hard Real-Time}. Esto requiere garantizar la \textbf{predictibilidad} y la \textbf{mínima intrusión} de la herramienta de medición.
-% Definición, tipos (hard, soft), y la importancia del determinismo.
+
 
 \subsection{Necesidad de la Trazabilidad Temporal (\textit{Tracing}) y el Problema de la Intrusión}
 \label{ssec:problema_latencia}
@@ -63,9 +60,26 @@ Se describe la plataforma física sobre la que se implementará la solución, de
 
 \subsection{Arquitectura System-on-Chip (SoC) Zynq}
 \label{ssec:arquitectura_zynq}
-% Detalle de la interconexión PS-PL, el ARM embebido y su rol como plataforma anfitriona.
-% Incluir la Figura 1 (esquema general de la placa) si no se incluyó en la Introducción.
 
+Para el desarrollo de sistemas embebidos complejos, la tendencia tecnológica se centra en las arquitecturas heterogéneas conocidas como \textbf{System-on-Chip (SoC)}. La arquitectura \textbf{Zynq} (de Xilinx, ahora AMD) esta tecnología, que integra un sistema de procesamiento de propósito general junto con la lógica programable en un único circuito integrado  . Este enfoque es importante para el presente proyecto, ya que proporciona una plataforma unificada para la \textit{trazabilidad} y el \textit{análisis} de datos.
+
+La arquitectura Zynq se divide en dos secciones principales, como se ilustra en la Figura \ref{fig:zynq_model}. Estas secciones son:
+
+\begin{itemize}
+    \item \textbf{Processing System (PS):} Corresponde al núcleo de procesamiento, que incluye procesadores \textbf{ARM Cortex-A9} (en la serie Zynq-7000), controladores de memoria caché, controladores de memoria DDR y periféricos. El PS está diseñado para ejecutar un sistema operativo complejo como \textbf{Linux} y actúa como la plataforma anfitriona para la recepción, el almacenamiento y el procesamiento de los datos de eventos generados por la lógica de \textit{hardware}.
+    
+    \item \textbf{Programmable Logic (PL):} Es la sección de FPGA, que contiene bloques lógicos reconfigurables (CLBs), memoria BRAM y recursos DSP. La PL es el dominio del \textbf{hardware personalizado} donde se sintetizarán el procesador \textit{soft-core} RISC-V y el \textbf{Módulo Reporter}. Esta sección es esencial para implementar el mecanismo de \textit{tracing} con mínima intrusión.
+\end{itemize}
+
+La interconexión de estos dos dominios está a cargo de la \textbf{interfaz AXI} (\textit{Advanced eXtensible Interface}), un bus de comunicación de alto rendimiento que permite el intercambio eficiente y sincronizado de datos entre el PS y la PL. El Módulo Reporter utilizará esta interfaz para transmitir los \textit{timestamps} y los datos de eventos generados en el \textit{soft-core} directamente a la memoria del PS para su posterior análisis en el entorno Linux.
+
+\begin{figure}[h!] % [h!] es un modificador de posición
+    \centering
+    \includegraphics[width=0.8\textwidth]{figs/Architecture_simple.png}
+    \caption{Modelo simplificado de la arquitectura Zynq.}
+    \label{fig:zynq_model}
+\end{figure}
+\cite{crockett2014zynq}
 \subsection{Uso de Linux en el Processing System (PS)}
 \label{ssec:linux_ps}
 % Justificación del uso de Linux para recepción, procesamiento y almacenamiento de datos.
