@@ -1,12 +1,68 @@
+%!TEX root = ./main.tex
 \chapter{Introducción}
 %\chapterquote{Hablaban siempre de dinero y planeaban asaltar un banco}{Domingo Cavallo, 2001}
 
-\section{Plantemiento de problema}
+\section{Problemática a abordar}
 \label{S:planteamiento de problema}
+
+%%%% Problema general a resolver
+
+Software systems deployed in mission-critical environments—such as aerospace, automotive, and medical devices—must adhere to stringent safety-critical standards to ensure reliability, fault tolerance, and operational integrity. Compliance with these standards is not optional; it forms the cornerstone of regulatory certification processes, which are mandatory for system validation and deployment. Examples of such standards in the process of quality assurance are:
+\begin{itemize}
+\item {\bf Aerospace:}  DO-178C (see~\cite{RTCA-DO-178C}) explicitly mentioning model-checking in the process of quality assurance (see~\cite{moy:ieeesoft-30_3}, via the DO-333 supplement (see~\cite{RTCA-DO-333}), which provides standards for tool qualification. Other formal methods like theorem proving are also applied. Examples of their application in the industry are the verification of safety-critical software parts of the Airbus A380 and the Boeing 787,
+\item {\bf Automotive:} ISO 26262 (see~\cite{ISO-26262}) showing some application, also in safety-critical software parts, of model-checking and static analysis, like in the case of Tesla Autopilot and Bosch ECUs,
+\item {\bf Medical devices:} IEC 62304 (see~\cite{IEC-62304-2006}) where there is evidence of the use of model-driven design and verification, as well as runtime verification, for checking safety properties of pacemakers and insulin infusion pumps, and
+\item {\bf Rail / Nuclear:} EN 50128 (see~\cite{UNE-EN-50128:2012-A1:2020}) also showing the application of model-driven design and verification, exemplified by the verification of control aspects of the Paris Metro and the European rail systems.
+\end{itemize}
+
+\Cref{fig:do-178c-requirements} shows how DO-178C interprets the development process of a software system. System requirements are mapped down along the path of the subsequent development tasks (represented by boxes and solid arrows) alongside with the review activities (dashed arrows) required to guaranty their fulfilment. Test activities that, according to DO-333 can be replaced by formal verification, are shown in doted arrows.
+
+ \begin{figure}[t]
+  \centering
+  \includegraphics[width=\textwidth]{do-178c-requirements.png}
+  \caption{Activities required by DO-178C for an implementation to meet systems requirements. This image is inspired by the one appearing in the DO-178C document by the RTCA.}
+  \label{fig:do-178c-requirements}
+\end{figure}
+
+If we look closely at the verification activities (i.e., the doted arrows), the DO-178C documents require that formal methods have to be applied over the software artifact in executable form (usually understood as the exact same binary that will be deployed into production), in order to be accepted as a demonstration of the satisfaction of the requirements.
+%
+This condition rules out most, if not all, model-based approaches by setting the focus exclusively on those formal methods tailored to be applied over the source code (as it will ``fly''), and/or its executable binary object obtained for the target architecture. The normative even stipulates that for any analysis performed on the source code, there must be a demonstration that the properties established at that level still hold at the binary level. 
+
+%%%% Estrategia de verificación adoptada
+
+Monitoring the satisfaction of properties at run-time is an idea that has been around for many years now. 
+%
+In 1978 the preprocessor macro \texttt{assert} was introduced in \emph{The C Standard Library}, \texttt{libc}, enabling the detection of violations of properties of interest at runtime. The {\tt assert} macro tests a boolean expression; if it evaluates to \texttt{false}, the macro will print a message to the \texttt{stderr} and then call the \texttt{abort()} instruction; if it does to \texttt{true}, the program continues. In some sense, as far as we can program a function for testing the property of interest, we can monitor its satisfaction at any point of interest of the \emph{software under test} (SUT). Following this guideline, one can populate our source code with as many assertion tests as we want embedding the runtime monitoring of properties in the SUT. 
+%
+This idea of enforcing assertions at run-time is a well-known verification technique, generally referred to as \emph{Runtime Assertion Checking} (RAC).
+%
+While this approach might seem right, it has several drawbacks:
+\begin{inparaenum}[1)]
+\item \label{drawback1} adding assertions change the base source code of the SUT, requiring the execution of the functions implementing the assertions, leading to additional execution time, and the potential occurrence of unwanted colateral effects, 
+\item \label{drawback2} assertions  are not aware of the control flow structure of the software artifact so they can only reflect properties of the current state of the execution of the SUT, and
+\item \label{drawback3} operating only at the process state, assertions has no abstraction mechanism for software units.
+\end{inparaenum}
+
+Since its introduction, \emph{run-time verification}~\cite{rv01} (RV) has been proved to be a powerful option for software verification. It is usually presented as a compromise between the more involved verification approaches like \emph{theorem proving}~\cite{owre:cav96,nipkow02,bertot04} and \emph{model checking}~\cite{clarke00}, usually considered too effortful, and testing~\cite{pezze07}, generally regarded as too incomplete. 
+%
+The growing popularity of RV is witnessed by the large number frameworks implementing the technique for various specification languages and logical properties (the reader can find a non-exhaustive list of RV frameworks in~\cite[Fig.~5]{leucker:setss16}). 
+
+In previous work we implemented a RAC technique for monitoring the satisfaction of first-order properties over the variables involved in the execution of the SUT, potentially applicable in the context of the certification process of DO-178C, setting the focus on avoiding the drawbacks discussed in Remarks~\ref{drawback1}~to~\ref{drawback3} shown above. 
+
+%%%% Estado actual de la herramienta (iniciativas previas)
+
+{\Large \bf Charlie:}
+\begin{itemize}
+\item Explicar brevemente la arquitectura de la herramienta; explicar que la estrategia de verificación se basa en un lenguaje de eventos adquiridos en \textit{runtime}
+\item Explicar que la prueba de concepto fue desarrollada a través de el uso de instrumentación de código para la adquisición de eventos y detallar que esta estrategia viola la propiedad de que el código verificado debe ser el mismo que va a ser desplegado en el artefacto
+\item Explicar que se implementó una solución en la que se elimina la instrumentación a partir de monitorear la ejecución a través de un \textit{debugger}; esta estrategia es más apropiada pero aun deficiente puesto que el software ejecuta significatevamente más lento y lo hace sobre una infraestructura de cómputo que discrepa con la de artefacto
+\end{itemize}
+
+%%%% Propuesta de solución
 
 \section{Solución propuesta}
 
-Para abordar el problema planteado, el presente Proyecto Final Integrador propone el desarrollo y la validación de un entorno experimental denominado "HW - RT - Reporter".
+Para abordar el problema planteado, el presente Proyecto Final Integrador propone el desarrollo y la validación de un entorno experimental denominado ``HW - RT - Reporter''.
 
 La solución se centra en el diseño e implementación de un Módulo Reporter en la Lógica Programable (PL) de una placa FPGA, el cual se encargará de monitorear un procesador soft-core (RISC-V) sintetizado en la misma PL. El Módulo Reporter actuará como un bloque de comunicación y de asignación de timestamp confiable por cada evento de interes.
 

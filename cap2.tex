@@ -1,3 +1,4 @@
+%!TEX root = ./main.tex
 \chapter{Marco teorico}
 \label{ch:marco_teorico}
 \graphicspath{{figs/}}
@@ -14,14 +15,12 @@ Este apartado establece el contexto y la necesidad de la investigación, justifi
 \subsection{Definición de Sistemas de Tiempo Real (STR)}
 \label{ssec:definicion_str}
 
-Un \textbf{Sistema de Tiempo Real (STR)} es aquel cuya corrección no depende únicamente de la precisión lógica del resultado de un cómputo, sino también del \textbf{momento exacto en que dicho resultado se produce}. En estos sistemas, el cumplimiento de las restricciones temporales (\textit{deadlines}) es un factor crucial. La gravedad del fallo al no cumplir con estas restricciones da lugar a dos clasificaciones principales:
-
+Un \textbf{Sistema de Tiempo Real (STR)} es aquel cuya corrección no depende únicamente de la precisión lógica del resultado de un cómputo, sino también del \textbf{momento exacto en que dicho resultado se produce}. En estos sistemas, el cumplimiento de las restricciones temporales (\textit{deadlines}) es un factor crucial. La gravedad del fallo al no cumplir con estas restricciones da lugar a dos clasificaciones principales\cite{liu2006real}:
 \begin{itemize}
-  \item \textbf{Sistema de Tiempo Real Estricto (\textit{Hard Real-Time}):} En estos sistemas, las restricciones temporales son de máxima prioridad. El \textbf{incumplimiento de una fecha límite se considera un fallo} del sistema. Un retraso, por mínimo que sea, puede tener consecuencias de fiabilidad.
-    
-  \item \textbf{Sistema de Tiempo Real Flexible (\textit{Soft Real-Time}):} El incumplimiento ocasional de una fecha límite es indeseable y degrada el rendimiento o la calidad del servicio, pero \textbf{no conduce a un fallo total} del sistema. En este caso, el valor del resultado disminuye después de su \textit{deadline}, pero el sistema puede tolerar las violaciones ocasionales.
+\item \textbf{Sistema de Tiempo Real Estricto (\textit{Hard Real-Time}):} En estos sistemas, las restricciones temporales son de máxima prioridad. El \textbf{incumplimiento de una fecha límite se considera un fallo} del sistema. Un retraso, por mínimo que sea, puede tener consecuencias de fiabilidad.    
+ \item \textbf{Sistema de Tiempo Real Flexible (\textit{Soft Real-Time}):} El incumplimiento ocasional de una fecha límite es indeseable y degrada el rendimiento o la calidad del servicio, pero \textbf{no conduce a un fallo total} del sistema. En este caso, el valor del resultado disminuye después de su \textit{deadline}, pero el sistema puede tolerar las violaciones ocasionales.
 \end{itemize}
-\cite{liu2006real}
+
 
 
 Dado que el objetivo del presente proyecto es evaluar el desempeño de un programa con la máxima precisión posible, el mecanismo de trazabilidad desarrollado debe aspirar a la fiabilidad de un entorno \textit{Hard Real-Time}. Esto requiere garantizar la \textbf{predictibilidad} y la \textbf{mínima intrusión} de la herramienta de medición.

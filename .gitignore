@@ -1,0 +1,10 @@
+*.aux
+*.bbl
+*.blg
+*.brf
+*.lof
+*.lot
+*.out
+*.pdf
+*.gz
+*.toc
