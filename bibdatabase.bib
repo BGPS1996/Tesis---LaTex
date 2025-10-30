@@ -289,6 +289,15 @@
 %%%%%%%%
 %%% People
 %%%%%%%%
+@String{moggi = {Eugenio Moggi}}
+@String{ulrich = {Andreas Ulrich}}
+@String{votintseva = {Anjelika Votintseva}}
+@String{cece = {G{\'e}rard C{\'e}c{\'e}}}
+@String{digiusto = {Cinzia Di Giusto}}
+@String{young+ = {Michal Young}}
+@String{vandin = {Andrea Vandin}}
+@String{lam = {Monica {S.} Lam}}
+@String{pearson = {Pearson Education, Inc.}}
 @String{moy = {Yannick Moy}} 
 @String{ledinot = {Emmanuel Ledinot}} 
 @String{delseny = {Herve Delseny}} 
@@ -473,7 +482,7 @@
 @String{nethercote = {Nicholas Nethercote}}
 @String{stuckey = {Peter {J.} Stuckey}}
 @String{becket = {Ralph Becket}}
-@String{brand = {Sebastian Brand}}
+@String{brand+ = {Sebastian Brand}}
 @String{duck = {Gregory {J.} Duck}}
 @String{tack = {Guido Tack}}
 @String{bessiere = {Christian Bessi{\`e}re}}
@@ -833,7 +842,7 @@
 @string{fiadeiro = {Jos{\'{e}} Luis Fiadeiro}}
 @string{figueira = {Santiago Figueira}}
 @string{fine = {Kit Fine}}
-@string{finkel = {{A.} Finkel}}
+@string{finkel = {Alain Finkel}}
 @string{finkelstein = {Larry Finkelstein}}
 @string{fischer = {Michael {J.} Fischer}}
 @string{fischer+ = {Clemens Fischer}}
@@ -2197,12 +2206,43 @@
 %%%%%%%
 %%% Book
 %%%%%%%
-@book{10.5555/114891,
-editor = {van Leeuwen, Jan},
+@book{perrin04,
+   title =     {Infinite words: automata, semigroups, logic and games},
+   author =    perrin # { and } # pin,
+   publisher = {Academic Press},
+   year =      {2004},
+   series =    {Pure and Applied Mathematics},
+   volumne = {141},
+   edition =   {1},
+ }
+   
+ @book{pezze07,
+   title =     {Software Testing and Analysis: Process, Principles and Techniques},
+   author =   pezze # { and } # young+,
+   publisher = wiley,
+   year =      {2007}
+   }
+   
+   @book{barwise75,
+   title =     {Admissible Sets and Structures: An Approach to Definability Theory},
+   author =    barwise,
+   publisher = {Springer Berlin Heidelberg},
+   year =      {1975},
+   series =    {Perspectives in Mathematical Logic}
+}
+   
+@book{aho06,
+title = {Compilers: Principles, Techniques, and Tools},
+author = aho # { and } # lam # { and } # sethi # { and } # ullman+, 
+year = {2006},
+publisher = pearson 
+}
+
+@book{vanlseeuwen91,
+editor = vanlseeuwen,
 title = {Handbook of theoretical computer science (vol. B): formal models and semantics},
 year = {1991},
-isbn = {0444880747},
-publisher = {MIT Press},
+publisher = mitpress,
 address = {Cambridge, MA, USA}
 }
 
@@ -2735,6 +2775,15 @@ year = {1996}
 	number = {42},
 	publisher = cambridge,
 	year = {1993}
+}
+
+@book{milner80,
+   title =     {A calculus of communicating systems},
+   author =    milner,
+   publisher = sv,
+   year =      {1980},
+   series =    lncs,
+   volume = {92}
 }
 
 @book{milner89,
@@ -3530,13 +3579,6 @@ year = {1996}
     year = {1969}
 }
 
-@book{pin04,
-    title = {Infinite Words: Automata, Semigroups, Logic and Games},
-    author = pin # { and } # perrin,
-    publisher = elsevier,
-    year = {2004}
-}
-
 @book{turski87,
     title = {The specification of computer programs},
     author = turski # { and } # maibaum,
@@ -3609,7 +3651,7 @@ year = {1996}
 @book{stallings06,
     title =      {Computer organization and architecture: Designing for performance},
     author =      {Wiliam Stallings},
-    publisher = {Pearson Education, Inc.},
+    publisher = pearson,
     year = {2006}
 }
 
@@ -3736,6 +3778,27 @@ note = {Translated into English by Andrew Motte in 1729. The translation revised
 %%%%%%%%
 %%% Article
 %%%%%%%%
+@article{moggi:ic-93,
+author = moggi,
+title = {Notions of computation and monads},
+journal = ic,
+volume = {93},
+number = {1},
+pages = {55-92},
+year = {1991},
+note = {Selections from 1989 IEEE Symposium on Logic in Computer Science}
+}
+
+@article{cece:ic-202_2,
+title = {Verification of programs with half-duplex communication},
+journal = {Information and Computation},
+volume = {202},
+number = {2},
+pages = {166-190},
+year = {2005},
+author = cece # { and } # finkel
+}
+
 @article{moy:ieeesoft-30_3,
 title	= {Testing or Formal Verification: {DO-178C} Alternatives and Industrial Experience},
 author	= moy # { and } # ledinot # { and } # delseny # { and } # wiels # { and } # monate,
@@ -7369,6 +7432,20 @@ pages = {2146--2231}
 %%%%%%%%%%%%
 %%% InProceedings
 %%%%%%%%%%%%
+@inproceedings{lopezpombo:coordination25,
+  title = {{\SEArchLogo}: an execution infrastructure for service-based software systems},
+  author = lopezpombo # { and } # martinezsune  # { and } # melgratti # { and } # senarruzzaanabia # { and } # tuosto,
+  pages = {TBD},
+  crossref = {coordination25}
+}
+
+@InProceedings{bruni12,
+	author = bruni # { and } # corradini # { and } # gadducci # { and } # lluchlafuente # { and } # vandin,
+	title = {A Conceptual Framework for Adaptation},
+	pages = {240--254},
+	crossref = {fase12}
+}
+
 @inproceedings{kistowski:ieee-mascots18,
   author       = kistowski # { and } # eismann # { and } # schmitt # { and } # bauer++ # { and } # grohmann # { and } # kounev,
   title        = {TeaStore: {A} Micro-Service Reference Application for Benchmarking, Modeling and Resource Management Research},
@@ -7573,7 +7650,7 @@ crossref={esocc16}
 }
 
 @InProceedings{nethercote:ppcp07,
-author=nethercote # { and } # stuckey # { and } # becket # { and } # brand # { and } # duck # { and } # tack,
+author=nethercote # { and } # stuckey # { and } # becket # { and } # brand+ # { and } # duck # { and } # tack,
 title={MiniZinc: Towards a Standard CP Modelling Language},
 year={2007},
 publisher=sv,
@@ -9392,10 +9469,49 @@ pages = {261–268},
 crossref = {stoc77}
 }
 
+@inproceedings{ulrich:issre15,
+  author       = ulrich # { and } # votintseva,
+  title        = {Experience report: Formal verification and testing in the development of embedded software},
+  pages        = {293--302},
+  crossref    = {issre2015}
+}
+
 
 %%%%%%%%%%%
 %%% Proceedings
 %%%%%%%%%%%
+@proceedings{issre2015,
+  title        = proc # {26th {IEEE} International Symposium on Software Reliability Engineering, {ISSRE} 2015},
+  month = nov,
+  date = {2},
+  place = {Gaithersbury, MD, USA},
+  publisher    = ieeecs,
+  year         = {2015}
+}
+
+@proceedings{coordination25,
+  editor    = digiusto # { and } # ravara,
+  booktitle = proc # {Coordination Models and Languages - 27nd {IFIP} {WG} 6.1 International Conference, {COORDINATION} 2025, Held as Part of the 20th International Federated Conference on Distributed Computing Techniques, DisCoTec 2025},
+  place = {Lille, France}, 
+  month = jun,
+  date = {16--20}, 
+  series    = lncs,
+  volume    = {TBD},
+  publisher = sv,
+  year      = {2025}
+}
+
+@proceedings{fase12,
+  editor       = delara # { and } # zisman,
+  title        = proc # {15th International Conference on Fundamental Approaches to Software Engineering  {FASE} 2012, Held as Part of the European Joint Conferences on Theory and Practice of Software, {ETAPS} 2012},
+  place = {Tallinn, Estonia},
+  date = {March 24 - April 1},
+  series       = lncs,
+  volume       = {7212},
+  publisher    = sv,
+  year         = {2012}
+}
+
 @proceedings{ieee-mascots18,
   booktitle        = {26th {IEEE} International Symposium on Modeling, Analysis, and Simulation of Computer and Telecommunication Systems  ({MASCOTS} 2018)},
   publisher    = ieeecs,
@@ -10713,7 +10829,7 @@ date = {March 22--29}
 
 @proceedings{concur10,
   editor    = gastin # { and } # laroussinie,
-  title     = proc # {21th International Conference on Concurrency Theory -- {CONCUR 2010}},
+  booktitle     = proc # {21th International Conference on Concurrency Theory -- {CONCUR 2010}},
   place = {Paris, France}, 
   date = {August 31-September 3},  
   series    = lncs,
@@ -13170,6 +13286,81 @@ school = {Department of Mathematics and Computer Science}
 %%%%%%%%%%%
 %%% Miscelaneas
 %%%%%%%%%%%
+@misc{IEC-61513-2011,
+      title={Nuclear Power Plants - Instrumentation And Control Important To Safety - General Requirements For Systems {(IEC 61513:2011)}}, 
+      author = {ISO},
+      type = {International Standard},
+      year={2011},
+      note= avail # {\url{https://webstore.ansi.org/standards/on/oveonormen615132013}},
+      anote={Confirmed 2013}
+}
+@misc{IEC-60880-2006,
+      title={Nuclear power plants -- Instrumentation and control systems important to safety -- Software aspects for computer-based systems performing category A functions {(IEC 60880:2006)}}, 
+      author = {ISO},
+      type = {International Standard},
+      year={2006},
+      note= avail # {\url{https://webstore.ansi.org/standards/on/oveonormen608802010}},
+      anote={Confirmed 2010}
+}
+@misc{IEC-62138-2018,
+      title={Nuclear power plants -- Instrumentation and control important for safety -- Software aspects for computer-based systems performing category B or C functions {(IEC 62138:2018)}}, 
+      author = {ISO},
+      type = {International Standard},
+      year={2018},
+      note= avail # {\url{https://webstore.ansi.org/standards/on/oveeniec621382020}},
+      anote={Confirmed 2020}
+}
+
+
+@misc{IEEE/ISO/IEC-24765-2017,
+      title={{IEEE/ISO/IEC 24765-2017} - Systems and software engineering--Vocabulary}, 
+      author = {ISO/IEC/IEEE},
+      type = {International Standard},
+      year={2017},
+      note= avail # {\url{https://standards.ieee.org/ieee/24765/6800/}}
+}
+
+@misc{RTCA-DO-178C,
+      title={{DO-178C} -- Software Considerations in Airborne Systems and Equipment Certification}, 
+      author = {RTCA},
+      type = {International Standard},
+      year={2011},
+      note= avail # {\url{https://my.rtca.org/productdetails?id=a1B36000001IcmrEAC}}
+}
+
+@misc{RTCA-DO-333,
+      title={{DO-333} -- Formal Methods Supplement to {DO-178C} and {DO-278A}}, 
+      author = {RTCA},
+      type = {International Standard},
+      year={2011},
+      note= avail # {\url{https://my.rtca.org/productdetails?id=a1B36000001IcffEAC}}
+}
+
+@misc{ISO-26262,
+      title={{ISO 26262} road vehicles functional safety}, 
+      author = {ISO},
+      type = {International Standard},
+      year={2018},
+      note= avail # {\url{https://www.iso.org/publication/PUB200262.html}}
+}
+
+@misc{IEC-62304-2006,
+      title={{IEC 62304:2006} -- Medical device software -- Software life cycle processes}, 
+      author = {ISO},
+      type = {International Standard},
+      year={2006},
+      note= avail # {\url{https://www.iso.org/standard/38421.html}},
+      anote = {Confirmed 2021}
+}
+
+@misc{UNE-EN-50128:2012-A1:2020,
+      title={{UNE EN 50128:2012/A1:2020} -- Railway applications - Communication, signalling and processing systems - Software for railway control and protection systems}, 
+      author = {{EN - European standards}},
+      type = {International Standard},
+      year={2020},
+      note= avail # {\url{https://www.en-standard.eu/une-en-50128-2012-a1-2020-railway-applications-communication-signalling-and-processing-systems-software-for-railway-control-and-protection-systems/}}
+}
+
 @misc{bliudze:arXiv-2412.16060,
       title={Adaptable TeaStore}, 
       author= bliudze # { and } # depalma # { and } # giallorenzo # { and } # lanese # { and } # zavattaro # { and } #  zemtsopndadji,
@@ -13729,3 +13920,159 @@ year = {1959}
   number={1},
   pages={145-151},
   doi={10.1109/18.61115}}
+
+
+@Article{ks90,
+  author = 	 {Kanellakis,{Paris C.} and Smolka,{Scott A.}},
+  title = 	 {{CCS Expressions, Finite State Processes and Three Problem of Equivalence}},
+  journal = 	 ic,
+  year = 	 {1990},
+  volume = 	 {86},
+  number = 	 {1},
+  pages = 	 {272-302}
+}
+
+@article{fmt05,
+  author       = {Gian{-}Luigi Ferrari and
+                  Ugo Montanari and
+                  Emilio Tuosto},
+  title        = {Coalgebraic minimization of HD-automata for the Pi-calculus using
+                  polymorphic types},
+  journal      = {Theor. Comput. Sci.},
+  volume       = {331},
+  number       = {2-3},
+  pages        = {325--365},
+  year         = {2005},
+  url          = {https://doi.org/10.1016/j.tcs.2004.09.021},
+  doi          = {10.1016/J.TCS.2004.09.021},
+  timestamp    = {Fri, 23 Jun 2023 22:30:56 +0200},
+  biburl       = {https://dblp.org/rec/journals/tcs/FerrariMT05.bib},
+  bibsource    = {dblp computer science bibliography, https://dblp.org}
+}
+
+
+@phdthesis{eMphd,
+  author       = {Emilio Tuosto},
+  title        = {Non-functional aspects of wide area network programming},
+  school       = {University of Pisa, Italy},
+  year         = {2003},
+  url          = {https://opac.bncf.firenze.sbn.it/bncf-prod/resource?uri=BNI0028424},
+  timestamp    = {Wed, 10 May 2023 21:52:00 +0200},
+  biburl       = {https://dblp.org/rec/phd/it/Tuosto03.bib},
+  bibsource    = {dblp computer science bibliography, https://dblp.org}
+}
+
+@article{Aleti2013SoftwareAO,
+  title={Software Architecture Optimization Methods: A Systematic Literature Review},
+  author={Aldeida Aleti and Barbora Buhnova and Lars Grunske and Anne Koziolek and Indika Meedeniya},
+  journal={IEEE Transactions on Software Engineering},
+  year={2013},
+  volume={39},
+  pages={658-683}
+}
+
+
+
+@article{lm05,
+title = {Quantitative $\mu$-calculus and CTL Based on Constraint Semirings},
+journal = {Electronic Notes in Theoretical Computer Science},
+volume = {112},
+pages = {37-59},
+year = {2005},
+note = {Proceedings of the Second Workshop on Quantitative Aspects of Programming Languages (QAPL 2004)},
+issn = {1571-0661},
+doi = {https://doi.org/10.1016/j.entcs.2004.02.063},
+url = {https://www.sciencedirect.com/science/article/pii/S1571066104052417},
+author = {Alberto Lluch-Lafuente and Ugo Montanari},
+keywords = {Constraint Semirings, Constraints, Temporal Logics, Quantitative Model Checking},
+abstract = {Model checking and temporal logics are boolean. The answer to the model checking question does a system satisfy a property? is either true or false, and properties expressed in temporal logics are defined over boolean propositions. While this classic approach is enough to specify and verify boolean temporal properties, it does not allow to reason about quantitative aspects of systems. Some quantitative extensions of temporal logics has been already proposed, especially in the context of probabilistic systems. They allow to answer questions like with which probability does a system satisfy a property? We present a generalization of two well-known temporal logics: CTL and the μ-calculus. Both extensions are defined over c-semirings, an algebraic structure that captures many problems and that has been proposed as a general framework for soft constraint satisfaction problems (CSP). Basically, a c-semiring consists of a domain, an additive operation and a multiplicative operation, which satisfy some properties. We present the semantics of the extended logics over transition systems, where a formula is interpreted as a mapping from the set of states to the domain of the c-semiring, and show that the usual connection between CTL and μ-calculus does not hold in general. In addition, we reason about the feasibility of computing the logics and illustrate some applications of our framework, including boolean model checking.}
+}
+
+@inproceedings{dfmpt05,
+  author    = {{De Nicola},Rocco  and
+               Ferrari,{Gian Luigi}  and
+               Ugo Montanari and
+               Rosario Pugliese and
+               Emilio Tuosto},
+  editor    = {Jean{-}Marie Jacquet and
+               Gian Pietro Picco},
+  title     = {A Process Calculus for QoS-Aware Applications},
+  booktitle = {Coordination Models and Languages, 7th International Conference, {COORDINATION}
+               2005, Namur, Belgium, April 20-23, 2005, Proceedings},
+  series    = {Lecture Notes in Computer Science},
+  volume    = {3454},
+  pages     = {33--48},
+  publisher = {Springer},
+  year      = {2005},
+  url       = {https://doi.org/10.1007/11417019\_3},
+  doi       = {10.1007/11417019\_3},
+  timestamp = {Tue, 14 May 2019 10:00:42 +0200},
+  biburl    = {https://dblp.org/rec/conf/coordination/NicolaFMPT05.bib},
+  bibsource = {dblp computer science bibliography, https://dblp.org}
+}
+
+
+@book{biere21,
+  title = {Handbook of {{Satisfiability}}: {{Second Edition}}},
+  shorttitle = {Handbook of {{Satisfiability}}},
+  editor = {Biere, Armin and Heule, Marijn and Van Maaren, Hans and Walsh, Toby},
+  year = {2021},
+  month = feb,
+  series = {Frontiers in {{Artificial Intelligence}} and {{Applications}}},
+  volume = {336},
+  publisher = {{IOS Press}},
+  doi = {10.3233/FAIA336},
+  urldate = {2023-06-30},
+  isbn = {978-1-64368-160-3 978-1-64368-161-0}
+}
+
+@inproceedings{ZFHNY2020,
+  author = {Fangyi Zhou and Francisco Ferreira and Raymond Hu and Rumyana Neykova and Nobuko Yoshida},
+  title = {Statically Verified Refinements for Multiparty Protocols},
+  booktitle = {OOPSLA 2020: Conference on Object-Oriented Programming Systems, Languages and Applications},
+  series = {PACMPL},
+ issue_date = {Nov 2020},
+ doi = {10.1145/3428216},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+number = {OOPSLA (Article 148)},
+pages ={30 pages},
+  year = 2020
+}
+
+@InProceedings{ich12,
+author="Ivanovi{\'{c}}, Dragan
+and Carro, Manuel
+and Hermenegildo, Manuel V.",
+editor="Liu, Chengfei
+and Ludwig, Heiko
+and Toumani, Farouk
+and Yu, Qi",
+title="A Constraint-Based Approach to Quality Assurance in Service Choreographies",
+booktitle="Service-Oriented Computing",
+year="2012",
+publisher="Springer Berlin Heidelberg",
+address="Berlin, Heidelberg",
+pages="252--267",
+abstract="The knowledge about the quality characteristics (QoS) of service compositions is crucial for determining their usability and economic value; the quality of service compositions is usually regulated using Service Level Agreements (SLAs). While end-to-end SLAs are well suited for request-reply interactions, more complex, decentralized, multi-participant compositions (service choreographies) typically need multiple message exchanges between stateful parties and the corresponding SLAs thus involve several cooperating parties with interdependent QoS. The usual approaches to determining QoS ranges structurally (which are by construction easily composable) are not applicable in this scenario. Additionally, the intervening SLAs may depend on the exchanged data. We present an approach to data-aware QoS assurance in choreographies through the automatic derivation of composable QoS models from participant descriptions. Such models are based on a message typing system with size constraints and are derived using abstract interpretation. The models obtained have multiple uses including run-time prediction, adaptive participant selection, or design-time compliance checking. We also present an experimental evaluation and discuss the benefits of the proposed approach.",
+isbn="978-3-642-34321-6"
+}
+
+
+@InProceedings{kgi13,
+author="Kattepur, Ajay
+and Georgantas, Nikolaos
+and Issarny, Val{\'e}rie",
+editor="Basu, Samik
+and Pautasso, Cesare
+and Zhang, Liang
+and Fu, Xiang",
+title="QoS Analysis in Heterogeneous Choreography Interactions",
+booktitle="Service-Oriented Computing",
+year="2013",
+publisher="Springer Berlin Heidelberg",
+address="Berlin, Heidelberg",
+pages="23--38",
+abstract="With an increasing number of services and devices interacting in a decentralized manner, choreographies are an active area of investigation. The heterogeneous nature of interacting systems leads to choreographies that may not only include conventional services, but also sensor-actuator networks, databases and service feeds. Their middleware behavior within choreographies is captured through abstract interaction paradigms such as client-service, publish-subscribe and tuple space. In this paper, we study these heterogeneous interaction paradigms, connected through an eXtensible Service Bus proposed in the CHOReOS project. As the functioning of such choreographies is dependent on the Quality of Service (QoS) performance of participating entities, an intricate analysis of interaction paradigms and their effect on QoS metrics is needed. We study the composition of QoS metrics in heterogeneous choreographies, and the subsequent tradeoffs. This produces interesting insights such as selection of a particular system and its middleware during design time or end-to-end QoS expectation/guarantees during runtime. Non-parametric hypothesis tests are applied to systems, where QoS dependent services may be replaced at runtime to prevent deterioration in performance.",
+isbn="978-3-642-45005-1"
+}
