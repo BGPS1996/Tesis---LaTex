@@ -6,48 +6,75 @@
 \label{S:planteamiento de problema}
 
 %%%% Problema general a resolver
+Los sistemas de software desarrollados en entornos de misiones criticas, como la industria aeroespacial, automotriz y dispositivos medicos, deben de adherirse a rigurosos protocolos de calidad y estandares de seguridad para garantizar \textbf{fiabilidad}, \textbf{tolerancia a fallos} y la \textbf{integridad operativa}.El cumplimiento de estos estandares no es opcional; se requieren para la \textit{certificación regulatoria}, los cuales son obligatorios para la validación y certificación del sistema. Ejemplos de estos estandares son: 
 
-Software systems deployed in mission-critical environments—such as aerospace, automotive, and medical devices—must adhere to stringent safety-critical standards to ensure reliability, fault tolerance, and operational integrity. Compliance with these standards is not optional; it forms the cornerstone of regulatory certification processes, which are mandatory for system validation and deployment. Examples of such standards in the process of quality assurance are:
+%Software systems deployed in mission-critical environments—such as aerospace, automotive, and medical devices—must adhere to stringent safety-critical standards to ensure reliability, fault tolerance, and operational integrity. Compliance with these standards is not optional; it forms the cornerstone of regulatory certification processes, which are mandatory for system validation and deployment. Examples of such standards in the process of quality assurance are:
+
 \begin{itemize}
-\item {\bf Aerospace:}  DO-178C (see~\cite{RTCA-DO-178C}) explicitly mentioning model-checking in the process of quality assurance (see~\cite{moy:ieeesoft-30_3}, via the DO-333 supplement (see~\cite{RTCA-DO-333}), which provides standards for tool qualification. Other formal methods like theorem proving are also applied. Examples of their application in the industry are the verification of safety-critical software parts of the Airbus A380 and the Boeing 787,
-\item {\bf Automotive:} ISO 26262 (see~\cite{ISO-26262}) showing some application, also in safety-critical software parts, of model-checking and static analysis, like in the case of Tesla Autopilot and Bosch ECUs,
-\item {\bf Medical devices:} IEC 62304 (see~\cite{IEC-62304-2006}) where there is evidence of the use of model-driven design and verification, as well as runtime verification, for checking safety properties of pacemakers and insulin infusion pumps, and
-\item {\bf Rail / Nuclear:} EN 50128 (see~\cite{UNE-EN-50128:2012-A1:2020}) also showing the application of model-driven design and verification, exemplified by the verification of control aspects of the Paris Metro and the European rail systems.
+\item {\bf Aeroespacial:}  DO-178C (ver~\cite{RTCA-DO-178C}) explicitamente mensiona el modelo de verificación de los modelos en procesos de calidad.(ver~\cite{moy:ieeesoft-30_3}, madiante el suplemento DO-333 (ver~\cite{RTCA-DO-333}), el cual promueve los estandares para la calificación de herramientas. Tambien se aplican otros métodos formales como la demostración de teoremas. Ejemplos de su aplicación en la industria son la verificación de partes de software críticas para la seguridad del Airbus A380 y el Boeing 787,
+%which provides standards for tool qualification. Other formal methods like theorem proving are also applied. Examples of their application in the industry are the verification of safety-critical software parts of the Airbus A380 and the Boeing 787,
+
+\item {\bf Automotriz:} ISO 26262 (ver~\cite{ISO-26262}) Al verificar algunas otras aplicaciones, se evidencia el uso de verificación de modelos y el analisis estatico en partes de sosftware de seguridad critica. Estos modelos y analisis toman como referencia el caso de \textit{Autopilot} y Bosch \textit{ECUs},
+
+%showing some application, also in safety-critical software parts, of model-checking and static analysis, like in the case of Tesla Autopilot and Bosch ECUs,
+
+\item {\bf Dispositivos medicos:} IEC 62304 (ver~\cite{IEC-62304-2006}) donde existen pruebas del uso del diseño y la verificación basados en modelos, así como de la verificación en tiempo de ejecución, para comprobar las propiedades de seguridad de los marcapasos y las bombas de infusión de insulina, ciclos respiratorios, etc.
+
+%IEC 62304 (see~\cite{IEC-62304-2006}) where there is evidence of the use of model-driven design and verification, as well as runtime verification, for checking safety properties of pacemakers and insulin infusion pumps, and
+
+\item {\bf Trenes / Nuclear:} También se muestra la aplicación del diseño y la verificación basados en modelos, ejemplificada por la verificación de aspectos de control del metro de París y los sistemas ferroviarios europeos.
+
+%En 50128 (ver~\cite{UNE-EN-50128:2012-A1:2020}) also showing the application of model-driven design and verification, exemplified by the verification of control aspects of the Paris Metro and the European rail systems.
 \end{itemize}
 
-\Cref{fig:do-178c-requirements} shows how DO-178C interprets the development process of a software system. System requirements are mapped down along the path of the subsequent development tasks (represented by boxes and solid arrows) alongside with the review activities (dashed arrows) required to guaranty their fulfilment. Test activities that, according to DO-333 can be replaced by formal verification, are shown in doted arrows.
+\cref{fig:do-178c-requisitos} La figura muestra cómo la norma DO-178C interpreta el proceso de desarrollo de un sistema de software. Los requisitos del sistema se detallan a lo largo de la ruta de las tareas de desarrollo (representadas por recuadros y flechas continuas), junto con las actividades de revisión (flechas discontinuas) necesarias para garantizar su cumplimiento. Las actividades de prueba que, según la norma DO-333, pueden sustituirse por verificación formal, se muestran con flechas punteadas.
+
+%shows how DO-178C interprets the development process of a software system. System requirements are mapped down along the path of the subsequent development tasks (represented by boxes and solid arrows) alongside with the review activities (dashed arrows) required to guaranty their fulfilment. Test activities that, according to DO-333 can be replaced by formal verification, are shown in doted arrows.
 
  \begin{figure}[t]
   \centering
   \includegraphics[width=\textwidth]{do-178c-requirements.png}
-  \caption{Activities required by DO-178C for an implementation to meet systems requirements. This image is inspired by the one appearing in the DO-178C document by the RTCA.}
-  \label{fig:do-178c-requirements}
+  \caption{Actividades requeridas por DO-178C para la implementación, con el fin de cumplir con los requisitos del sistema. Esta imagen está inspirada por la que aparece en el documento DO-178C por RTCA.}
+  %to meet systems requirements. This image is inspired by the one appearing in the DO-178C document by the RTCA.}
+  \label{fig:do-178c-requisitos}
 \end{figure}
 
-If we look closely at the verification activities (i.e., the doted arrows), the DO-178C documents require that formal methods have to be applied over the software artifact in executable form (usually understood as the exact same binary that will be deployed into production), in order to be accepted as a demonstration of the satisfaction of the requirements.
-%
-This condition rules out most, if not all, model-based approaches by setting the focus exclusively on those formal methods tailored to be applied over the source code (as it will ``fly''), and/or its executable binary object obtained for the target architecture. The normative even stipulates that for any analysis performed on the source code, there must be a demonstration that the properties established at that level still hold at the binary level. 
+Si observamos detenidamente las actividades de verificación (es decir, las flechas punteadas), los documentos DO-178C requieren que se apliquen métodos formales sobre el artefacto de software en forma ejecutable (generalmente entendido como el mismo binario que se implementará en producción), para que sea aceptado como una demostración del cumplimiento de los requisitos.
+
+%If we look closely at the verification activities (i.e., the doted arrows), the DO-178C documents require that formal methods have to be applied over the software artifact in executable form (usually understood as the exact same binary that will be deployed into production), in order to be accepted as a demonstration of the satisfaction of the requirements.
+Esta condición descarta la mayoría, si no todas, las metodologías basadas en modelos, al centrarse exclusivamente en los métodos formales diseñados para aplicarse al código fuente (tal como se ejecutará) o a su objeto binario ejecutable obtenido para la arquitectura objetivo. La normativa incluso estipula que, para cualquier análisis realizado sobre el código fuente, debe demostrarse que las propiedades establecidas a ese nivel se mantienen a nivel binario.
+
+%This condition rules out most, if not all, model-based approaches by setting the focus exclusively on those formal methods tailored to be applied over the source code (as it will ``fly''), and/or its executable binary object obtained for the target architecture. The normative even stipulates that for any analysis performed on the source code, there must be a demonstration that the properties established at that level still hold at the binary level. 
 
 %%%% Estrategia de verificación adoptada
 
-Monitoring the satisfaction of properties at run-time is an idea that has been around for many years now. 
+%Monitoring the satisfaction of properties at run-time is an idea that has been around for many years now. 
+La supervición del cumplimiento de las propiedades en tiempo de ejecución es una idea desde hace muchos años.
 %
-In 1978 the preprocessor macro \texttt{assert} was introduced in \emph{The C Standard Library}, \texttt{libc}, enabling the detection of violations of properties of interest at runtime. The {\tt assert} macro tests a boolean expression; if it evaluates to \texttt{false}, the macro will print a message to the \texttt{stderr} and then call the \texttt{abort()} instruction; if it does to \texttt{true}, the program continues. In some sense, as far as we can program a function for testing the property of interest, we can monitor its satisfaction at any point of interest of the \emph{software under test} (SUT). Following this guideline, one can populate our source code with as many assertion tests as we want embedding the runtime monitoring of properties in the SUT. 
+En 1978 se introdujo la macro de preprocesador \texttt{assert} en la \emph{Biblioteca Estándar de C \texttt{libc}}, permitiendo la detección de violaciones de propiedades de interés en tiempo de ejecución. La macro \texttt{assert} evalúa una expresión booleana; si se evalúa como \texttt{false}, la macro imprime un mensaje en la salida de error estándar \texttt{stderr} y luego llama a la instrucción \texttt{abort()}; si se evalúa como \texttt{true}, el programa continúa. En cierto modo, en la medida en que podamos programar una función para evaluar la propiedad de interés, podemos supervisar su cumplimiento en cualquier punto de interés del \emph{software bajo pruebas} (SUT). Siguiendo esta directriz, podemos incluir en nuestro código fuente tantas pruebas de aserción como deseemos, integrando la supervisión en tiempo de ejecución de las propiedades del SUT.
+
+%In 1978 the preprocessor macro \texttt{assert} was introduced in \emph{The C Standard Library}, \texttt{libc}, enabling the detection of violations of properties of interest at runtime. The {\tt assert} macro tests a boolean expression; if it evaluates to \texttt{false}, the macro will print a message to the \texttt{stderr} and then call the \texttt{abort()} instruction; if it does to \texttt{true}, the program continues. In some sense, as far as we can program a function for testing the property of interest, we can monitor its satisfaction at any point of interest of the \emph{software under test} (SUT). Following this guideline, one can populate our source code with as many assertion tests as we want embedding the runtime monitoring of properties in the SUT. 
+
+Esta idea de hacer cumplir las aserciones en tiempo de ejecución es una técnica de verificación bien conocida, generalmente denominada \emph{Verificación de Aserciones en Tiempo de Ejecución} (RAC).
+%This idea of enforcing assertions at run-time is a well-known verification technique, generally referred to as \emph{Runtime Assertion Checking} (RAC).
 %
-This idea of enforcing assertions at run-time is a well-known verification technique, generally referred to as \emph{Runtime Assertion Checking} (RAC).
-%
-While this approach might seem right, it has several drawbacks:
+Si bien este enfoque parece ser el correcto, contrae ciertos incovenientes:
 \begin{inparaenum}[1)]
-\item \label{drawback1} adding assertions change the base source code of the SUT, requiring the execution of the functions implementing the assertions, leading to additional execution time, and the potential occurrence of unwanted colateral effects, 
-\item \label{drawback2} assertions  are not aware of the control flow structure of the software artifact so they can only reflect properties of the current state of the execution of the SUT, and
-\item \label{drawback3} operating only at the process state, assertions has no abstraction mechanism for software units.
+\item \label{incoveniente 1} Agregar aserciones modifica el código fuente base del sistema bajo prueba (SUT), lo que requiere la ejecución de las funciones que implementan las aserciones, lo que conlleva un tiempo de ejecución adicional y la posible aparición de efectos colaterales no deseados.
+\item \label{incoveniente 2} Las aserciones no tienen en cuenta la estructura de flujo de control del artefacto de software, por lo que solo pueden reflejar propiedades del estado actual de la ejecución del sistema bajo prueba (SUT).
+\item \label{incoveniente 3} Al operar únicamente a nivel de estado del proceso, las aserciones no tienen ningún mecanismo de abstracción para las unidades de software.
 \end{inparaenum}
 
-Since its introduction, \emph{run-time verification}~\cite{rv01} (RV) has been proved to be a powerful option for software verification. It is usually presented as a compromise between the more involved verification approaches like \emph{theorem proving}~\cite{owre:cav96,nipkow02,bertot04} and \emph{model checking}~\cite{clarke00}, usually considered too effortful, and testing~\cite{pezze07}, generally regarded as too incomplete. 
-%
-The growing popularity of RV is witnessed by the large number frameworks implementing the technique for various specification languages and logical properties (the reader can find a non-exhaustive list of RV frameworks in~\cite[Fig.~5]{leucker:setss16}). 
+Desde su introducción, la \emph{verificación en tiempo de ejecución} ~\cite{rv01} (RV) ha demostrado ser una opción potente para la verificación de software. Generalmente se presenta como un punto intermedio entre los enfoques de verificación más complejos, como la \emph{demostración de teoremas}~\cite{owre:cav96,nipkow02,bertot04} y la \emph{verificación de modelos}~\cite{clarke00}, considerados generalmente demasiado laboriosos, y las pruebas~\cite{pezze07}, generalmente consideradas demasiado incompletas.
+%Since its introduction, \emph{run-time verification}~\cite{rv01} (RV) has been proved to be a powerful option for software verification. It is usually presented as a compromise between the more involved verification approaches like \emph{theorem proving}~\cite{owre:cav96,nipkow02,bertot04} and \emph{model checking}~\cite{clarke00}, usually considered too effortful, and testing~\cite{pezze07}, generally regarded as too incomplete. 
 
-In previous work we implemented a RAC technique for monitoring the satisfaction of first-order properties over the variables involved in the execution of the SUT, potentially applicable in the context of the certification process of DO-178C, setting the focus on avoiding the drawbacks discussed in Remarks~\ref{drawback1}~to~\ref{drawback3} shown above. 
+La creciente popularidad de RV se evidencia en la gran cantidad de frameworks que implementan esta técnica para diversos lenguajes de especificación y propiedades lógicas (el lector puede encontrar una lista no exhaustiva de frameworks RV en ~\cite[Fig.~5]{leucker:setss16}).
+
+En trabajos anteriores, implementamos una técnica RAC para supervisar el cumplimiento de las propiedades de primer orden sobre las variables involucradas en la ejecución del sistema bajo prueba (SUT), potencialmente aplicable en el contexto del proceso de certificación DO-178C, centrándonos en evitar los inconvenientes descritos en las Observaciones ~\ref{incoveniente 1}~ a ~\ref{incoveniente 3}.
+
+%The growing popularity of RV is witnessed by the large number frameworks implementing the technique for various specification languages and logical properties (the reader can find a non-exhaustive list of RV frameworks in~\cite[Fig.~5]{leucker:setss16}). 
+
+%In previous work we implemented a RAC technique for monitoring the satisfaction of first-order properties over the variables involved in the execution of the SUT, potentially applicable in the context of the certification process of DO-178C, setting the focus on avoiding the drawbacks discussed in Remarks~\ref{drawback1}~to~\ref{drawback3} shown above. 
 
 %%%% Estado actual de la herramienta (iniciativas previas)
 
@@ -99,7 +126,6 @@ Diseñar un setup que sea capaz de trackear registros de interes, permitiendo co
 El presente Proyecto Final Integrador se estructura en capítulos que describen el desarrollo, la implementación y la validación del sistema HR-RT-Reporter:
 
 \begin{itemize}
-    \item \textbf{Capítulo 1. Introducción:} Presenta el planteamiento del problema, la justificación, la solución propuesta, la hipótesis de trabajo, los objetivos y la estructura general del documento.
     
     \item \textbf{Capítulo 2. Marco Teórico:} Sistematiza la información técnica necesaria, incluyendo la revisión de literatura, la investigación sobre arquitecturas FPGA-ARM, el estudio de la precisión de los \textit{timestamps} y la selección del \textit{soft-core} y el sistema operativo.
     

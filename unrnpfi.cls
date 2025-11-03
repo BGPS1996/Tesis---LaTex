@@ -147,7 +147,7 @@
     	\vspace*{0.2in}
     	
     	\begin{huge}
-    		\textbf{Título de tu Proyecto Final Integrador aquí} \\
+    		\textbf{HR-RT-Reporter} \\
     	\end{huge}
     	
     	\vspace*{0.15in}
@@ -158,10 +158,10 @@
     	
     	\begin{large}
     		Estudiante\\
-    		Nombre Apellido\\
-    		UNRN \textnumero{}XXXXX\\
+    		Sotomayor P. B. Gabriel\\
+    		UNRN \textnumero{}20242\\
     		%aca va el número de UNRN que aparece en el PADRÓN
-                \url{mail@mail.com}\\
+                \url{grabixz.29@gmail.com}\\
     	\end{large}
     	
     	\vspace*{0.5in}
@@ -186,7 +186,7 @@
     	\vfill{}
     	
     	\begin{large}
-    		\textsc{Mes, año}
+    		\textsc{Noviebre, 2025}
                 %\textsc{Abril, 2024}
     	\end{large}
     \end{center}
