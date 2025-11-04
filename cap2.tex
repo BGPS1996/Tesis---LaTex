@@ -15,7 +15,7 @@ Este apartado establece el contexto y la necesidad de la investigación, justifi
 \subsection{Definición de Sistemas de Tiempo Real (STR)}
 \label{ssec:definicion_str}
 
-Un \textbf{Sistema de Tiempo Real (STR)} es aquel cuya corrección no depende únicamente de la precisión lógica del resultado de un cómputo, sino también del \textbf{momento exacto en que dicho resultado se produce}. En estos sistemas, el cumplimiento de las restricciones temporales (\textit{deadlines}) es un factor crucial. La gravedad del fallo al no cumplir con estas restricciones da lugar a dos clasificaciones principales\cite{liu2006real}:
+Un \textbf{Sistema de Tiempo Real (STR)} es aquel cuya corrección no depende únicamente de la precisión lógica del resultado de un cómputo, sino también del \textbf{momento exacto en que dicho resultado se produce}. En estos sistemas, el cumplimiento de las restricciones temporales (\textit{deadlines}) es un factor crucial. La gravedad del fallo al no cumplir con estas restricciones da lugar a dos clasificaciones principales (ver~\cite{liu2006real}):
 \begin{itemize}
 \item \textbf{Sistema de Tiempo Real Estricto (\textit{Hard Real-Time}):} En estos sistemas, las restricciones temporales son de máxima prioridad. El \textbf{incumplimiento de una fecha límite se considera un fallo} del sistema. Un retraso, por mínimo que sea, puede tener consecuencias de fiabilidad.    
  \item \textbf{Sistema de Tiempo Real Flexible (\textit{Soft Real-Time}):} El incumplimiento ocasional de una fecha límite es indeseable y degrada el rendimiento o la calidad del servicio, pero \textbf{no conduce a un fallo total} del sistema. En este caso, el valor del resultado disminuye después de su \textit{deadline}, pero el sistema puede tolerar las violaciones ocasionales.
@@ -62,7 +62,7 @@ Se describe la plataforma física sobre la que se implementará la solución, de
 
 Para el desarrollo de sistemas embebidos complejos, la tendencia tecnológica se centra en las arquitecturas heterogéneas conocidas como \textbf{System-on-Chip (SoC)}. La arquitectura \textbf{Zynq} (de Xilinx, ahora AMD) esta tecnología, que integra un sistema de procesamiento de propósito general junto con la lógica programable en un único circuito integrado  . Este enfoque es importante para el presente proyecto, ya que proporciona una plataforma unificada para la \textit{trazabilidad} y el \textit{análisis} de datos.
 
-La arquitectura Zynq se divide en dos secciones principales, como se ilustra en la Figura \ref{fig:zynq_model}. Estas secciones son:
+La arquitectura Zynq se divide en dos secciones principales, como se ilustra en la \cref{fig:zynq_model}. Estas secciones son:
 
 \begin{itemize}
     \item \textbf{Processing System (PS):} Corresponde al núcleo de procesamiento, que incluye procesadores \textbf{ARM Cortex-A9} (en la serie Zynq-7000), controladores de memoria caché, controladores de memoria DDR y periféricos. El PS está diseñado para ejecutar un sistema operativo complejo como \textbf{Linux} y actúa como la plataforma anfitriona para la recepción, el almacenamiento y el procesamiento de los datos de eventos generados por la lógica de \textit{hardware}.
@@ -70,7 +70,7 @@ La arquitectura Zynq se divide en dos secciones principales, como se ilustra en 
     \item \textbf{Programmable Logic (PL):} Es la sección de FPGA, que contiene bloques lógicos reconfigurables (CLBs), memoria BRAM y recursos DSP. La PL es el dominio del \textbf{hardware personalizado} donde se sintetizarán el procesador \textit{soft-core} RISC-V y el \textbf{Módulo Reporter}. Esta sección es esencial para implementar el mecanismo de \textit{tracing} con mínima intrusión.
 \end{itemize}
 
-La interconexión de estos dos dominios está a cargo de la \textbf{interfaz AXI} (\textit{Advanced eXtensible Interface}), un bus de comunicación de alto rendimiento que permite el intercambio eficiente y sincronizado de datos entre el PS y la PL. El Módulo Reporter utilizará esta interfaz para transmitir los \textit{timestamps} y los datos de eventos generados en el \textit{soft-core} directamente a la memoria del PS para su posterior análisis en el entorno Linux.
+La interconexión de estos dos dominios está a cargo de la \textbf{interfaz AXI} (\textit{Advanced eXtensible Interface}), un bus de comunicación de alto rendimiento que permite el intercambio eficiente y sincronizado de datos entre el PS y la PL. El Módulo Reporter utilizará esta interfaz para transmitir los \textit{timestamps} y los datos de eventos generados en el \textit{soft-core} directamente a la memoria del PS para su posterior análisis en el entorno Linux. (ver \cite{crockett2014zynq})
 
 \begin{figure}[h!] % [h!] es un modificador de posición
     \centering
@@ -78,7 +78,14 @@ La interconexión de estos dos dominios está a cargo de la \textbf{interfaz AXI
     \caption{Modelo simplificado de la arquitectura Zynq.}
     \label{fig:zynq_model}
 \end{figure}
-\cite{crockett2014zynq}
+Para profundizar en el contexto de implementación, este subapartado describe con mayor detalle la arquitectura del System-on-Chip (SoC) Zynq. Se establece la configuración y disposición de sus componentes clave, fundamentales para sustentar la hipótesis del trabajo.
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figs/Architecture_simple_distribucion.png} 
+    \caption{Relación entre el sistema de software, el sistema de hardware y la arquitectura Zynq}
+    \label{fig:zynq_Relationship}
+\end{figure}
+
 \subsection{Uso de Linux en el Processing System (PS)}
 \label{ssec:linux_ps}
 % Justificación del uso de Linux para recepción, procesamiento y almacenamiento de datos.
@@ -99,6 +106,51 @@ Se centra en la unidad que genera los eventos y el medio por el cual se transfie
 \subsection{Protocolo Advanced eXtensible Interface (AXI)}
 \label{ssec:protocolo_axi}
 % Explicar AXI como estándar de comunicación eficiente (Master/Slave) entre los bloques de hardware.
+Los buses \textit{AXI} se pueden usar de forma flexible y, en general, se utilizan para conectar el/los procesador/es y otros bloques IP en un sistema embebido. De hecho, existen tres variantes de \textit{AXI4}(\textit{AXI4} es la versión en la que contribuyó \textit{Xilinx} para su definición), cada una de las cuales representa un protocolo de bus diferente, como se resume a continuación. La elección del protocolo de bus \textit{AXI} para una conexión específica depende de las propiedades deseadas de dicha conexión.
+
+\begin{itemize}
+    \item \textit{AXI4}: Para enlaces asignados a memoria, y para proporcionar el mayor rendimiento: se proporciona una dirección seguida de una transferencia de ráfaga de datos de hasta 256 palabras de datos (o \textit{data beats}).
+
+    \item \textit{AXI4-Lite}: Un enlace simplificado que admite una sola transferencia de datos por conexión (sin ráfagas). \textit{AXI4-Lite} también utiliza mapeo de memoria: en este caso, se transfieren una dirección y una única palabra de datos.
+    
+    \item \textit{AXI4-Stream}: Para transmisión de datos a alta velocidad, admite transferencias en ráfaga de tamaño ilimitado. No dispone de mecanismo de direccionamiento; este tipo de bus es ideal para el flujo directo de datos entre origen y destino (sin mapeo de memoria).
+\end{itemize}
+
+\textbf{Interfaz AXI e Interconexiones}
+La interfaz principal entre la PS y la PL se realiza mediante un conjunto de nueve interfaces AXI, cada una compuesta por múltiples canales. Estas establecen conexiones dedicadas entre la PL y las interconexiones dentro de la PS, como se indica en la \cref{fig:AXI_II}. Es útil definir brevemente estos dos términos importantes:
+
+\begin{itemize}
+    \item Interfaz: Una conexión punto a punto para el intercambio de datos, direcciones y señales de negociación entre clientes maestros y esclavos dentro del sistema.
+
+    \item Interconexión: Una interconexión es, en esencia, un conmutador que gestiona y dirige el tráfico entre las interfaces \textit{AXI} conectadas. Existen varias interconexiones dentro del PS; algunas se conectan directamente al PL (como se muestra en la \cref{fig:AXI_II}) y otras son de uso interno únicamente. Las conexiones entre estas interconexiones también se establecen mediante interfaces \textit{AXI}.
+\end{itemize}
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figs/Interface_Interconection_AXI.png} 
+    \caption{La estructura de las interconexiones e interfaces AXI que conectan la fuente de alimentación (PS) y la línea de procesamiento (PL).}
+    \label{fig:AXI_II}
+\end{figure}
+
+\textbf{OPCIONAL - NO SE SI ES NECESARIO ENTRAR TANTO EN EL TEMA DE LAS INTERFACES E INTERCONEXIONES}
+
+\begin{table}[!ht]
+    \centering
+    \caption{Interfaces entre PS y PL}
+    \begin{tabular}{|l|l|l|l|}
+    \hline
+        \textbf{Nombre Interfaz} & \textbf{Descripción interfax} & \textbf{Maestro} & \textbf{Esclavo} \\ \hline
+        \textbf{M\_AXI\_GP0} & Proposito General (AXI\_GP) & PS & PL \\ \hline
+        \textbf{M\_AXI\_GP1} & Proposito General (AXI\_GP) & PS & PL \\ \hline
+        \textbf{S\_AXI\_GP0} & Proposito General (AXI\_GP) & PL & PS \\ \hline
+        \textbf{S\_AXI\_GP1} & Proposito General (AXI\_GP) & PL & PS \\ \hline
+        \textbf{S\_AXI\_ACP } & Puerto de coherencia del acelerador (ACP), transacción coherente de caché & PL & PS \\ \hline
+        \textbf{S\_AXI\_HP0} & Puertos de alto rendimiento (AXI\_HP) con FIFO de lectura/escritura. & PL & PS \\ \hline
+        \textbf{S\_AXI\_HP1} & Puertos de alto rendimiento (AXI\_HP) con FIFO de lectura/escritura. & PL & PS \\ \hline
+        \textbf{S\_AXI\_HP2} & Puertos de alto rendimiento (AXI\_HP) con FIFO de lectura/escritura. & PL & PS \\ \hline
+        \textbf{S\_AXI\_HP3} & Puertos de alto rendimiento (AXI\_HP) con FIFO de lectura/escritura. & PL & PS \\ \hline
+    \end{tabular}
+\end{table}
 
 % -------------------------------------------------------------
 % SECCIÓN 4: El Core Técnico del Reporter
@@ -106,7 +158,7 @@ Se centra en la unidad que genera los eventos y el medio por el cual se transfie
 \section{Técnicas de Trazabilidad y Asignación Temporal (Timestamping)}
 \label{sec:timestamping}
 
-Este es el segmento más importante, ya que sustenta el mecanismo propuesto por tu Módulo Reporter.
+Este es el segmento más importante, ya que sustenta el mecanismo propuesto por el Módulo Reporter.
 
 \subsection{Mecanismos de Trazado de Eventos (Event Tracing)}
 \label{ssec:event_tracing}
@@ -123,7 +175,7 @@ Este es el segmento más importante, ya que sustenta el mecanismo propuesto por 
 % Esto sustenta la necesidad de la "señal de referencia" de la hipótesis.
 
 % -------------------------------------------------------------
-% SECCIÓN 5: Antecedentes (Opcional, pero recomendable)
+% SECCIÓN 5: Antecedentes (Opcional)
 % -------------------------------------------------------------
 \section{Trabajos Relacionados y Antecedentes}
 \label{sec:trabajos_relacionados}
