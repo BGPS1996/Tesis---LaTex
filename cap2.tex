@@ -102,7 +102,104 @@ Se centra en la unidad que genera los eventos y el medio por el cual se transfie
 \label{ssec:riscv}
 % Introducción al ISA RISC-V.
 % Requisitos para la síntesis en PL: acceso a registros (PC) y generación de señales de evento.
+% ----------------------------------------------------------------------------------------
+\subsection{Procesador Soft-Core RISC-V: Análisis y Selección}
+\label{ssec:seleccion_softcore}
 
+% --- 1. Introducción y Objetivo ---
+La elección del núcleo de procesamiento que operará como \textit{soft-core} en la Lógica Programable (PL) es una decisión crítica para la metodología de trazabilidad del proyecto. Este núcleo constituye el \textbf{Sistema Bajo Prueba (SUT)} y su arquitectura impacta directamente tanto la capacidad de acceder a registros internos como la minimización de la intrusión. Por lo tanto, el objetivo es realizar una evaluación comparativa para seleccionar el núcleo que ofrezca el mejor equilibrio entre rendimiento, consumo de recursos y flexibilidad para la instrumentación.
+
+Los candidatos evaluados para esta implementación son:
+\begin{itemize}
+    \item VexRiscv
+    \item Ibex
+    \item PicoRV32
+\end{itemize}
+
+% --- 2. Criterios de Selección ---
+\subsubsection{Criterios de Selección Técnica}
+
+La evaluación de los candidatos se basará en criterios técnicos específicos, diseñados para garantizar la viabilidad y precisión del Módulo Reporter, así como la robustez del producto final:
+
+\begin{enumerate}
+% Uso de Recursos
+    \item \textbf{Tamaño y Consumo de Recursos:} Requisitos de Lógica Programable (LUTs, FFs, BRAMs) en la FPGA. Un menor consumo es preferible para asegurar espacio para el Módulo Reporter y reducir la complejidad del enrutamiento.
+% Arq. Pipeline   
+    \item \textbf{Flexibilidad y Customización:} Capacidad de modificar la arquitectura interna y el \textbf{pipeline} del núcleo para exponer registros clave del CPU (ej., el \textit{Program Counter}, PC).
+% Historial   
+    \item \textbf{Predictibilidad:} Arquitectura que favorezca un comportamiento determinista, minimizando la latencia y el \textbf{jitter} temporal, factores vitales en sistemas de tiempo real.
+% Flexibilidad
+    \item \textbf{Capacidad de \textit{Tracing}:} Evaluación de los puertos de \textit{debug} o señales internas accesibles, esenciales para la captura de eventos en la PL.
+% Timestaping No Intrusivo
+% Comunidad    
+    \item \textbf{Comunidad y Documentación:} Este factor es fundamental para garantizar la robustez, el mantenimiento a largo plazo y la disponibilidad de soporte técnico para el proyecto.
+% Frecuencia Zybo
+% Heritage Aeroespacial
+     \item \textbf{Antecedentes Industriales:} Historial de uso o certificación del núcleo en la industria aeroespacial o en entornos de seguridad crítica, lo cual es relevante para el objetivo de replicabilidad y aplicación en dicho campo. \textbf{Antecedentes Industriales:} Historial de uso o certificación del núcleo en la industria aeroespacial o en entornos de seguridad crítica, lo cual es relevante para el objetivo de replicabilidad y aplicación en dicho campo.
+% Bus Sniffing
+    \item \textbf{Bus Sniffing:} Capacidad de monitorear transacciones del bus  sin intervenir, lo cual es importante para \textit{debugging} de interacciones de memoria/perfiféricos.
+% Overhead Trazabilidad
+    \item \textbf{Overhead de Trazabilidad:} Es el impacto en performance cuando el tracing está activo. 
+
+
+\end{enumerate}
+
+% --- 3. Análisis Comparativo (Tabla Formal) ---
+\subsubsection{Análisis Comparativo de VexRiscv e Ibex}
+
+Se presenta una comparación formal de las métricas clave de ambos núcleos \textit{soft-core}, obtenidas de su documentación oficial y validaciones en la literatura:
+
+\begin{table}[h!]
+    \centering
+    \caption{Comparación de Soft-Cores RISC-V: Análisis de Trazabilidad}
+    \label{tab:comparacion_softcores}
+    \begin{tabular}{|l|c|c|}
+        \hline
+        \textbf{Criterio de Evaluación} & \textbf{VexRiscv} & \textbf{Ibex} \\
+        \hline
+        \hline
+        \textbf{1. Uso de Recursos (LUTs)} & 1,800-3,500 & 2,000-4,000 \\
+        \hline
+        \textbf{2. Arquitectura de Pipeline} & 5 etapas (configurable) & 2 etapas (principal) \\
+        \hline
+        \textbf{3. Predictibilidad y Determinismo} & Alta (configurable) & Muy Alta (2-etapas simple) \\
+        \hline
+        \textbf{4. Historial de Seguridad} & OpenTitan (derivados) & OpenTitan (core principal) \\
+        \hline
+        \textbf{5. Flexibilidad para Tracing} & Muy Alta (sistema plugins) & Alta (Debug Spec 0.13) \\
+        \hline
+        \textbf{6. Timestamping No Intrusivo} & Excelente (observadores HW) & Bueno (performance counters) \\
+        \hline
+        \textbf{7. Comunidad y Soporte} & Muy Activa (SpinalHDL) & Activa (lowRISC/Google) \\
+        \hline
+        \textbf{8. Frecuencia Máxima (Zybo)} & 150-200 MHz & 100-150 MHz \\
+        \hline
+        \textbf{9. Heritage Aeroespacial} & Prototipos (académico) & OpenTitan (seguridad) \\
+        \hline
+        \textbf{10. Bus Sniffing} & Nativo (plugins) & Posible (extensiones) \\
+        \hline
+        \textbf{11. Overhead de Trazabilidad} & 0-2\% (hardware) & 1-3\% (debug module) \\
+        \hline
+    \end{tabular}
+\end{table}
+
+\clearpage % Fuerza el regreso al formato vertical estándar para el siguiente contenido.
+
+% --- 4. Decisión y Justificación ---
+\subsubsection{Decisión y Justificación del Núcleo Seleccionado}
+
+\textbf{Decisión:} Se opta por la implementación del núcleo **[Insertar Nombre del Núcleo Seleccionado, ej. Ibex]** como Sistema Bajo Prueba (SUT).
+
+\textbf{Justificación:} Esta selección se basa en la priorización del criterio de \textbf{minimización de recursos} y \textbf{predictibilidad}. [Insertar el Núcleo] requiere un menor \textit{footprint} de Lógica Programable, lo cual:
+
+\begin{enumerate}
+    \item Garantiza que la PL tenga la capacidad suficiente para la implementación del \textbf{Módulo Reporter} y sus subsistemas de \textit{timestamping}.
+    \item \textbf{Minimiza el riesgo de *timing closure* y facilita la replicabilidad} del \textit{setup} experimental.
+    \item Ofrece una arquitectura más simple que, aunque pueda tener una \textit{Fmax} menor que el ARM del PS, presenta una \textbf{mejor predictibilidad temporal}, factor esencial para la validez de los \textit{timestamps} recolectados.
+\end{enumerate}
+
+
+%-----------------------------------------------------------------------------------------
 \subsection{Protocolo Advanced eXtensible Interface (AXI)}
 \label{ssec:protocolo_axi}
 % Explicar AXI como estándar de comunicación eficiente (Master/Slave) entre los bloques de hardware.

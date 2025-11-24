@@ -28,6 +28,13 @@
 \RequirePackage{fancyhdr}
 \RequirePackage{changepage}
 
+
+\usepackage{rotating}  % Paquete esencial para rotación
+\usepackage{booktabs}  % Para mejores líneas
+\usepackage{array}     % Para control de columnas
+\usepackage{geometry}  % Para ajustar márgenes
+\geometry{a4paper, margin=1.5cm}  % Márgenes reducidos
+
 % La opci\'{o}n `preprint' produce un texto con m\'{a}rgenes m\'{a}s chicos (m\'{a}s texto por p\'{a}gina)
 \newif\ifDraft \Draftfalse
 \DeclareOption{preprint}{\Drafttrue}
