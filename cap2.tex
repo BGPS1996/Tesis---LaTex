@@ -146,8 +146,7 @@ La evaluación de los candidatos se basará en criterios técnicos específicos,
 
 % --- 3. Análisis Comparativo (Tabla Formal) ---
 \subsubsection{Análisis Comparativo de VexRiscv e Ibex}
-
-Se presenta una comparación formal de las métricas clave de ambos núcleos \textit{soft-core}, obtenidas de su documentación oficial y validaciones en la literatura:
+Se descartó el \textit{soft-core PicoRV32} porque sus métricas, previamente evaluadas, no se adaptaban a los estándares del proyecto. A continuación, se presenta una comparación formal de las métricas clave de ambos núcleos \textit{soft-core}, obtenidas de su documentación oficial y validaciones en la literatura:
 
 \begin{table}[h!]
     \centering
@@ -183,18 +182,17 @@ Se presenta una comparación formal de las métricas clave de ambos núcleos \te
     \end{tabular}
 \end{table}
 
-\clearpage % Fuerza el regreso al formato vertical estándar para el siguiente contenido.
 
 % --- 4. Decisión y Justificación ---
 \subsubsection{Decisión y Justificación del Núcleo Seleccionado}
 
-\textbf{Decisión:} Se opta por la implementación del núcleo **[Insertar Nombre del Núcleo Seleccionado, ej. Ibex]** como Sistema Bajo Prueba (SUT).
+\textbf{Decisión:} Se opta por la implementación del núcleo \textbf{IBEX} como Sistema Bajo Prueba (SUT).
 
-\textbf{Justificación:} Esta selección se basa en la priorización del criterio de \textbf{minimización de recursos} y \textbf{predictibilidad}. [Insertar el Núcleo] requiere un menor \textit{footprint} de Lógica Programable, lo cual:
+\textbf{Justificación:} Esta selección se basa en la priorización del criterio de \textbf{minimización de recursos} y \textbf{predictibilidad}. Ibex requiere un menor \textit{footprint} de Lógica Programable, lo cual:
 
 \begin{enumerate}
     \item Garantiza que la PL tenga la capacidad suficiente para la implementación del \textbf{Módulo Reporter} y sus subsistemas de \textit{timestamping}.
-    \item \textbf{Minimiza el riesgo de *timing closure* y facilita la replicabilidad} del \textit{setup} experimental.
+    \item \textbf{Minimiza el riesgo de \textbf{timing closure} y facilita la replicabilidad} del \textit{setup} experimental.
     \item Ofrece una arquitectura más simple que, aunque pueda tener una \textit{Fmax} menor que el ARM del PS, presenta una \textbf{mejor predictibilidad temporal}, factor esencial para la validez de los \textit{timestamps} recolectados.
 \end{enumerate}
 
@@ -229,25 +227,25 @@ La interfaz principal entre la PS y la PL se realiza mediante un conjunto de nue
     \label{fig:AXI_II}
 \end{figure}
 
-\textbf{OPCIONAL - NO SE SI ES NECESARIO ENTRAR TANTO EN EL TEMA DE LAS INTERFACES E INTERCONEXIONES}
+%\textbf{OPCIONAL - NO SE SI ES NECESARIO ENTRAR TANTO EN EL TEMA DE LAS INTERFACES E INTERCONEXIONES}
 
-\begin{table}[!ht]
-    \centering
-    \caption{Interfaces entre PS y PL}
-    \begin{tabular}{|l|l|l|l|}
-    \hline
-        \textbf{Nombre Interfaz} & \textbf{Descripción interfax} & \textbf{Maestro} & \textbf{Esclavo} \\ \hline
-        \textbf{M\_AXI\_GP0} & Proposito General (AXI\_GP) & PS & PL \\ \hline
-        \textbf{M\_AXI\_GP1} & Proposito General (AXI\_GP) & PS & PL \\ \hline
-        \textbf{S\_AXI\_GP0} & Proposito General (AXI\_GP) & PL & PS \\ \hline
-        \textbf{S\_AXI\_GP1} & Proposito General (AXI\_GP) & PL & PS \\ \hline
-        \textbf{S\_AXI\_ACP } & Puerto de coherencia del acelerador (ACP), transacción coherente de caché & PL & PS \\ \hline
-        \textbf{S\_AXI\_HP0} & Puertos de alto rendimiento (AXI\_HP) con FIFO de lectura/escritura. & PL & PS \\ \hline
-        \textbf{S\_AXI\_HP1} & Puertos de alto rendimiento (AXI\_HP) con FIFO de lectura/escritura. & PL & PS \\ \hline
-        \textbf{S\_AXI\_HP2} & Puertos de alto rendimiento (AXI\_HP) con FIFO de lectura/escritura. & PL & PS \\ \hline
-        \textbf{S\_AXI\_HP3} & Puertos de alto rendimiento (AXI\_HP) con FIFO de lectura/escritura. & PL & PS \\ \hline
-    \end{tabular}
-\end{table}
+%\begin{table}[!ht]
+%    \centering
+ %   \caption{Interfaces entre PS y PL}
+%    \begin{tabular}{|l|l|l|l|}
+%    \hline
+%        \textbf{Nombre Interfaz} & \textbf{Descripción interfax} & \textbf{Maestro} & \textbf{Esclavo} \\ \hline
+%        \textbf{M\_AXI\_GP0} & Proposito General (AXI\_GP) & PS & PL \\ \hline
+%        \textbf{M\_AXI\_GP1} & Proposito General (AXI\_GP) & PS & PL \\ \hline
+%        \textbf{S\_AXI\_GP0} & Proposito General (AXI\_GP) & PL & PS \\ \hline
+%        \textbf{S\_AXI\_GP1} & Proposito General (AXI\_GP) & PL & PS \\ \hline
+%        \textbf{S\_AXI\_ACP } & Puerto de coherencia del acelerador (ACP), transacción coherente de caché & PL & PS \\ \hline
+%        \textbf{S\_AXI\_HP0} & Puertos de alto rendimiento (AXI\_HP) con FIFO de lectura/escritura. & PL & PS \\ \hline
+%        \textbf{S\_AXI\_HP1} & Puertos de alto rendimiento (AXI\_HP) con FIFO de lectura/escritura. & PL & PS \\ \hline
+%        \textbf{S\_AXI\_HP2} & Puertos de alto rendimiento (AXI\_HP) con FIFO de lectura/escritura. & PL & PS \\ \hline
+%        \textbf{S\_AXI\_HP3} & Puertos de alto rendimiento (AXI\_HP) con FIFO de lectura/escritura. & PL & PS \\ \hline
+%    \end{tabular}
+%\end{table}
 
 % -------------------------------------------------------------
 % SECCIÓN 4: El Core Técnico del Reporter
