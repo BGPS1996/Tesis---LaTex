@@ -90,18 +90,79 @@ Para profundizar en el contexto de implementación, este subapartado describe co
 \label{ssec:linux_ps}
 % Justificación del uso de Linux para recepción, procesamiento y almacenamiento de datos.
 
+El \textit{Processing System} (PS) de la arquitectura Zynq se utiliza para ejecutar un sistema operativo embebido basado en Linux; para este desarrollo en particular se ha seleccionado la distribución \textbf{Ubuntu en su versión 4.0.0}. Esta elección proporciona un entorno robusto y de alto nivel que simplifica las tareas de recepción, almacenamiento persistente, ordenamiento y posterior análisis de los datos de trazabilidad, abstrayendo la complejidad del manejo directo del almacenamiento masivo y los protocolos de red.
+
+Desde la perspectiva del software, la recolección y monitoreo de las marcas temporales se realiza a través de una aplicación o \textit{script} desarrollado en lenguaje C que se ejecuta en el espacio de usuario (\textit{user space}) de Linux. Dado que el sistema operativo administra el hardware mediante memoria virtual a través de la unidad de gestión de memoria o MMU (\textit{Memory Management Unit}), las aplicaciones de usuario no pueden acceder de forma directa a los periféricos físicos mapeados en el sistema. 
+
+Para salvar esta restricción y comunicarse con la lógica personalizada en la PL, el script en C emplea la llamada al sistema \texttt{mmap()} sobre el dispositivo de caracteres genérico del kernel \texttt{/dev/mem}. Este mecanismo permite proyectar un segmento de la memoria física del sistema directamente en el espacio de direccionamiento virtual del proceso en ejecución, habilitando accesos de lectura y escritura de baja latencia a través de punteros.
+
+Específicamente, las transacciones se propagan a través del bus de comunicación AXI que interconecta el procesador ARM con el módulo de hardware en la PL. En el diseño del sistema, este bloque está implementado mediante el componente \texttt{ibex\_bram\_wrapper\_bd\_0}, el cual actúa como la interfaz de acoplamiento del \textbf{Módulo Reporter}. Dicho módulo se encuentra alocado en la dirección base física \texttt{0x41200000} del mapa de memoria global. 
+
+Al realizar operaciones de lectura en esta dirección mapeada, el script bajo el entorno de Ubuntu solicita de manera asíncrona el tiempo de ejecución (\textit{runtime} o \textit{timestamp}) del programa que se está ejecutando concurrentemente en el procesador \textit{soft-core} Ibex. De esta manera, se logra capturar la temporización del sistema bajo prueba con un impacto nulo en su determinismo, delegando en el entorno del PS únicamente las tareas de recolección y telemetría de datos de manera eficiente.
 % -------------------------------------------------------------
 % SECCIÓN 3: La Unidad Bajo Prueba y la Interconexión
 % -------------------------------------------------------------
-\section{Procesadores Soft-Core y Protocolo de Comunicación}
+\section{Procesador Soft-Core y Protocolo de Comunicación}
 \label{sec:softcore_comunicacion}
 
-Se centra en la unidad que genera los eventos y el medio por el cual se transfieren.
+La arquitectura propuesta para el sistema \textbf{HR-RT-Reporter} se fundamenta en la coexistencia y cooperación de dos dominios de procesamiento asíncronos sobre un dispositivo SoC reconfigurable: el procesador anfitrión de propósito general (ARM Cortex-A9 en el PS) y la Unidad Bajo Prueba (SUT, el procesador \textit{soft-core} RISC-V Ibex en la PL). La transferencia y el acoplamiento de datos entre ambos dominios se realiza utilizando como medio físico una memoria SRAM de bloque de doble puerto nativa de la FPGA (\textit{True Dual-Port Block RAM} o BRAM) mapeada en el direccionamiento de ambos procesadores, interconectada a través de buses de comunicación bajo el estándar \textbf{AMBA AXI} (\textit{Advanced Microcontroller Bus Architecture}).
+
+\subsection{El Problema del Acceso Concurrente (Productor-Consumidor)}
+\label{ssec:productor_consumidor}
+
+El uso de memorias compartidas en sistemas heterogéneos introduce el desafío clásico de concurrencia conocido como el problema del \textit{productor-consumidor}. En este escenario:
+\begin{itemize}
+    \item El procesador Ibex actúa como el \textbf{productor}, escribiendo dinámicamente las marcas temporales (\textit{timestamps}) y las direcciones de retorno en posiciones específicas de la BRAM tras detectar eventos de interés.
+    \item El procesador ARM actúa como el \textbf{consumidor}, leyendo de manera asíncrona dichos datos desde el espacio de usuario en Linux para procesarlos y almacenarlos.
+\end{itemize}
+
+Dado que ambos núcleos operan con frecuencias de reloj y flujos de ejecución independientes, la ausencia de un mecanismo de control de acceso daría lugar a colisiones de bus y fallos de integridad si intentaran realizar accesos de lectura/escritura simultáneos sobre la misma celda física de memoria. Este fenómeno no solo corrompe los datos recolectados, sino que puede inducir estados indeterministas o detenciones (\textit{deadlocks}) en los buses AXI de interconexión.
+
+\subsection{Mecanismo de Arbitraje por Hardware y Exclusión Mutua}
+\label{ssec:arbitraje_hardware}
+
+Para garantizar la integridad del sistema y resolver el problema de concurrencia sin introducir intrusión temporal en el software del Ibex, se ha diseñado e implementado un sistema de \textt{arbitraje basado en hardware} integrado dentro del componente \texttt{ibex\_bram\_wrapper\_bd\_0}. Este sistema utiliza una bandera de control (\textit{flag}) y lógica de multiplexación (MUX) gobernada desde el PS mediante un registro de control de propósito general (\texttt{AXI GPIO}).
+
+La señal de control principal del árbitro es la línea de reinicio activo-bajo del procesador Ibex, denominada \texttt{rst\_ni}. El comportamiento de la exclusión mutua por hardware se rige bajo las siguientes reglas lógicas:
+
+\begin{enumerate}
+    \item \textbf{Fase de Inicialización e Inyección (Arbitraje Pasivo):} 
+    Cuando el ARM mantiene al Ibex en estado de reset ($\texttt{rst\_ni} = 0$), el procesador \textit{soft-core} se encuentra en alta impedancia y no realiza peticiones al bus. El multiplexor lógico de hardware otorga el control exclusivo de lectura y escritura ($R/W$) de la BRAM al controlador de bus del ARM mapeado en \texttt{0x40000000}. Esto permite al entorno de Linux inyectar de forma segura las instrucciones binarias (\textit{firmware}) en la memoria compartida sin riesgo de colisión.
+    
+    \item \textbf{Fase de Operación y Monitoreo (Exclusión de Bus):} 
+    Una vez que el ARM libera el reset del Ibex ($\texttt{rst\_ni} = 1$), el procesador \textit{soft-core} toma el control primario de su bus local para ejecutar el programa desde la BRAM. Durante esta fase, el multiplexor de hardware aísla las líneas de escritura del ARM para evitar interferencias. Si el ARM intenta realizar un acceso invasivo de escritura sobre el rango protegido mientras el Ibex está activo, la lógica de exclusión del wrapper bloquea la transacción o devuelve un valor constante de protección (\texttt{0x00000000}), garantizando la inmunidad del Ibex al efecto sonda.
+\end{enumerate}
+
+Este diseño asegura que el hardware mantenga la consistencia de los datos en la memoria intermedia de forma determinística en un único ciclo de reloj, cumpliendo con los estándares de robustez temporal para sistemas críticos.
 
 \subsection{Procesador Soft-Core RISC-V}
 \label{ssec:riscv}
-% Introducción al ISA RISC-V.
-% Requisitos para la síntesis en PL: acceso a registros (PC) y generación de señales de evento.
+% Colocar bibliografia de donde lo saque: guia practica de Risc-V el atlas de la arquitectura  abierta de david patterson etc
+
+La elección de la arquitectura del procesador que actúa como el Sistema Bajo Prueba (SUT, por sus siglas en inglés) dentro de la Lógica Programable (PL) es un pilar fundamental para el diseño del sistema de monitoreo. En este proyecto se adoptan procesadores basados en la arquitectura de conjunto de instrucciones (\textit{Instruction Set Architecture}, ISA) \textbf{RISC-V}.
+
+RISC-V es una ISA de código abierto (\textit{open-source}) basada en los principios de computación de conjunto de instrucciones reducido (RISC). A diferencia de las arquitecturas comerciales tradicionales (como ARM o x86), la especificación de RISC-V es completamente libre y libre de regalías. Su principal característica es su naturaleza estrictamente \textbf{modular y extensible}. La arquitectura se define a partir de un conjunto base de enteros (por ejemplo, \texttt{RV32I} para operaciones de 32 bits), al cual se le pueden incorporar extensiones estandarizadas según los requerimientos de la aplicación, tales como multiplicación y división en hardware (\texttt{M}), operaciones atómicas (\texttt{A}), o instrucciones comprimidas de 16 bits (\texttt{C}) para optimizar el uso de memoria. 
+
+Esta apertura y modularidad resulta crítica para el desarrollo de herramientas de trazabilidad en hardware. Al tener acceso directo al código fuente en lenguajes de descripción de hardware (HDL) del procesador \textit{soft-core}, es posible inspeccionar, modificar e instrumentar su arquitectura interna a nivel de registros y buses, una tarea que resulta inviable en procesadores de hardware cerrado (\textit{hard-cores}) debido a la presencia de bloques de depuración propietarios y ofuscados.
+
+\subsubsection{Requisitos de Síntesis en PL e Instrumentación Pasiva}
+
+Para que un procesador \textit{soft-core} RISC-V pueda ser integrado exitosamente en la PL junto con el \textbf{Módulo Reporter}, su descripción de hardware debe cumplir con ciertos requisitos estructurales y de diseño. Dado que el objetivo es realizar un seguimiento temporal (\textit{tracing}) con la mínima intrusión posible, la captura de datos debe ser completamente \textbf{pasiva}, es decir, el hardware de monitoreo debe actuar como un observador que  `` escucha " las señales internas del procesador sin alterar las etapas de su \textit{pipeline} ni penalizar su frecuencia máxima de operación ($F_{max}$).
+
+Los dos requisitos fundamentales para la síntesis de la unidad bajo prueba orientada al monitoreo son:
+
+\begin{enumerate}
+    \item \textbf{Acceso Directo al Contador de Programa (PC):} El \textit{Program Counter} es el registro más crítico para la reconstrucción del flujo de control del software. El \textit{soft-core} seleccionado debe permitir exponer hacia la lógica exterior el valor del PC correspondiente a la etapa de ejecución (\textit{Execute}) o, idealmente, a la etapa de retiro de instrucciones (\textit{Writeback/Write-Retire}). Esto permite al Módulo Reporter conocer con exactitud la dirección de memoria de la instrucción que se acaba de ejecutar en un ciclo de reloj determinado.
+    
+    \item \textbf{Generación de Señales de Evento y Calificadores del Pipeline:} El simple acceso al valor del PC es insuficiente para una trazabilidad precisa, ya que los fenómenos microarquitectónicos propios del procesador (como las burbujas en el \textit{pipeline}, las detenciones por dependencias de datos o \textit{stalls}, y las instrucciones descartadas por predicciones de salto incorrectas) introducirían falsos positivos en las mediciones. Por lo tanto, el núcleo debe exponer señales de control internas que sirvan como calificadores de eventos, tales como:
+    \begin{itemize}
+        \item \texttt{instr\_valid} o \texttt{instr\_retired}: Una señal activa por un único ciclo de reloj que indica que una instrucción ha completado su ejecución exitosamente y ha modificado el estado del procesador.
+        \item \texttt{is\_compressed}: Para determinar si el PC actual apunta a una instrucción de 16 o 32 bits, vital para el correcto parsing posterior de los binarios.
+        \item Señales de excepción o interrupción (\texttt{trap}): Para identificar saltos abruptos en el flujo causados por eventos asíncronos de hardware o fallos de software.
+    \end{itemize}
+\end{enumerate}
+
+Al cumplir con estas condiciones, el procesador se vuelve completamente transparente para el Módulo Reporter, permitiendo que las marcas temporales se asignen de manera síncrona a eventos reales de ejecución del código, garantizando la fidelidad exigida en entornos de tiempo real estricto.
 % ----------------------------------------------------------------------------------------
 \subsection{Procesador Soft-Core RISC-V: Análisis y Selección}
 \label{ssec:seleccion_softcore}
@@ -219,8 +280,9 @@ La interfaz principal entre la PS y la PL se realiza mediante un conjunto de nue
 
     \item Interconexión: Una interconexión es, en esencia, un conmutador que gestiona y dirige el tráfico entre las interfaces \textit{AXI} conectadas. Existen varias interconexiones dentro del PS; algunas se conectan directamente al PL (como se muestra en la \cref{fig:AXI_II}) y otras son de uso interno únicamente. Las conexiones entre estas interconexiones también se establecen mediante interfaces \textit{AXI}.
 \end{itemize}
+\pagebreak  %Este lo puse porque no entraba en la hoja, es posible que deba sacarlo en algun momento, si se añade mas texto arriba
 
-\begin{figure}[h!]
+\begin{figure}[ht!]
     \centering
     \includegraphics[width=0.8\textwidth]{figs/Interface_Interconection_AXI.png} 
     \caption{La estructura de las interconexiones e interfaces AXI que conectan la fuente de alimentación (PS) y la línea de procesamiento (PL).}
@@ -250,6 +312,9 @@ La interfaz principal entre la PS y la PL se realiza mediante un conjunto de nue
 % -------------------------------------------------------------
 % SECCIÓN 4: El Core Técnico del Reporter
 % -------------------------------------------------------------
+% -------------------------------------------------------------
+% SECCIÓN 4: El Core Técnico del Reporter
+% -------------------------------------------------------------
 \section{Técnicas de Trazabilidad y Asignación Temporal (Timestamping)}
 \label{sec:timestamping}
 
@@ -257,18 +322,28 @@ Este es el segmento más importante, ya que sustenta el mecanismo propuesto por 
 
 \subsection{Mecanismos de Trazado de Eventos (Event Tracing)}
 \label{ssec:event_tracing}
-% Definición de qué constituye un "evento" de CPU (instrucción, interrupción, acceso).
+
+En el contexto de la evaluación de software para sistemas críticos, un ``evento'' se define como cualquier cambio de estado significativo en el flujo de ejecución del procesador. Para la arquitectura de trazabilidad implementada junto al \textit{soft-core} RISC-V, los eventos primarios consisten en la búsqueda de instrucciones (\textit{instruction fetch}) y las transacciones explícitas con la jerarquía de memoria (lecturas y escrituras de datos).
+
+El mecanismo propuesto adopta un enfoque de observación pasiva en hardware (\textit{bus sniffing}). En lugar de modificar el código fuente de la aplicación con llamadas intrusivas de software o interrupciones, el \textbf{Módulo Reporter} se conecta directamente a los buses nativos del procesador: el bus de instrucciones y el bus de datos. Al monitorear pasivamente las señales de solicitud (\texttt{req}) y las direcciones de memoria (\texttt{addr}) directamente en la FPGA, el sistema es capaz de detectar de manera autónoma cuándo se procesa una instrucción o se accede a una variable. Esta técnica captura el evento ``al vuelo´´   para su registro, erradicando la intrusión temporal y preservando íntegramente el determinismo del Sistema Bajo Prueba (SUT).
 
 \subsection{Generación de Marcas Temporales (Timestamps) en Hardware}
 \label{ssec:generacion_timestamps}
-% Cómo se genera un timestamp (contadores de clock).
-% Análisis de la precisión y tolerancia requerida para STR.
+
+Para cumplir con la precisión que exige un Sistema de Tiempo Real Estricto (\textit{Hard Real-Time}), la medición no puede depender de contadores gestionados por el sistema operativo, dadas las latencias variables de interrupción. Por ello, la generación de marcas temporales (\textit{timestamps}) se implementa mediante un circuito digital dedicado en la Lógica Programable (PL).
+
+El diseño parte del oscilador base de 125 MHz de la placa Zybo, el cual es procesado mediante un bloque \textit{Clock Wizard} (PLL/MMCM) para sintetizar un reloj estable de \textbf{50 MHz} exclusivo para el dominio del Ibex y el Reporter. A partir de esta señal, se instancia un contador de giro libre en hardware puro (\texttt{hw\_timestamp}). 
+
+Operando a 50 MHz, cada incremento del contador representa un delta temporal exacto de \textbf{20 nanosegundos}. Esta resolución garantiza una granularidad microscópica para perfilar la ejecución. El carácter no intrusivo de la asignación temporal radica en que el contador avanza en un bloque condicional (\texttt{always\_ff}) ajeno al pipeline del procesador. Cuando el código en C corriendo en el Ibex requiere dejar constancia de un tiempo, simplemente realiza una operación de carga (\texttt{lw}) apuntando a la dirección base de memoria reservada (ej. \texttt{0x80000000}). Un multiplexor lógico intercepta esta lectura y devuelve el valor del \textit{timestamp} en tiempo real, sin interrumpir el conteo ni generar detenciones en el hardware.
 
 \subsection{Problemas de Sincronización entre Dominios de Clock}
 \label{ssec:sincronizacion_clock}
-% Discusión sobre cómo asegurar la coherencia temporal al transferir datos entre el dominio del soft-core (PL) y el dominio del ARM (PS).
-% Esto sustenta la necesidad de la "señal de referencia" de la hipótesis.
 
+La implementación del sistema sobre la arquitectura heterogénea Zynq presenta un desafío clásico de diseño digital: la coexistencia de múltiples dominios de reloj asíncronos. Por un lado, el subsistema de procesamiento ARM (PS) ejecuta Linux a frecuencias del orden de los cientos de MHz; por el otro, la Lógica Programable (PL) que aloja al SUT y al Módulo Reporter opera estrictamente a 50 MHz.
+
+El principal problema surge cuando el entorno Linux intenta recolectar las marcas temporales a través de las interconexiones de memoria compartida (BRAM). Transmitir señales entre frecuencias distintas (\textit{Clock Domain Crossing} o CDC) es propenso a generar metaestabilidad temporal, lo cual corrompería la lectura de los datos de 20ns.
+
+Para resolver este conflicto y asegurar la coherencia temporal, el diseño incorpora una validación de estado mediante una señal de referencia obligatoria. El módulo \textit{Clock Wizard} provee una señal lógica denominada \texttt{locked}, la cual asegura que el PLL ha alcanzado el enganche de fase y el reloj de 50 MHz es estable y seguro. El sistema se mantiene condicionado a esta señal para arrancar. Asimismo, el protocolo de bus AXI soluciona asincronía de la comunicación inyectando los datos de los \textit{timestamps} a través de colas de aislamiento (FIFOs asíncronas). Esto permite que el ARM lea la información de estado de la FPGA de forma segura, garantizando la validez absoluta de los datos recolectados bajo análisis.
 % -------------------------------------------------------------
 % SECCIÓN 5: Antecedentes (Opcional)
 % -------------------------------------------------------------

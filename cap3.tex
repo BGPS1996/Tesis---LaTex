@@ -1,1 +1,208 @@
-hola mundo
+%!TEX root = ./main.tex
+
+\chapter{Metodología y Diseño} \label{ch:metodologia}
+\graphicspath{{figs/}}
+
+% Breve introducción del capítulo indicando qué se va a explicar (el flujo de trabajo y las decisiones arquitectónicas).
+El presente capítulo detalla la metodología de diseño e implementación del sistema HR-RT-Reporter...
+
+% =======================================================================
+% SECCIÓN 1: Arquitectura General
+% =======================================================================
+\section{Arquitectura General del Sistema}
+% Explicar la visión global: el SoC Zynq-7000, la placa Zybo, y por qué se divide en dos mundos (PS y PL).
+
+\subsection{Separación de Dominios: Sistema de Procesamiento (PS) y Lógica Programable (PL)}
+\label{ssec:separacion_dominios}
+
+Para cumplir simultáneamente con los requisitos de determinismo temporal del software crítico y de trazabilidad no intrusiva de eventos, la arquitectura del sistema propuesto implementa una estricta separación de responsabilidades físicas y lógicas. Esta división aprovecha de manera óptima las dos divisiones principales del SoC Zynq-7000: el Sistema de Procesamiento (PS, \textit{Processing System}) y la Lógica Programable (PL, \textit{Programmable Logic}).
+
+En el dominio del \textbf{Sistema de Procesamiento (PS)}, el microprocesador ARM Cortex-A9 ejecuta una distribución del sistema operativo Linux empotrado. Este procesador actúa como el elemento maestro y supervisor de la plataforma experimental, asumiendo las siguientes responsabilidades clave:
+\begin{itemize}
+    \item \textbf{Control de la Ejecución:} Coordina y habilita la inicialización o detención del procesador \textit{soft-core} en la PL mediante la gestión del estado lógico de su señal de reinicio física (\textit{reset}), controlada a través de un canal AXI GPIO de un bit.
+    \item \textbf{Recolección Asíncrona de Datos:} Lee de manera periódica y diferida los registros de marcas temporales almacenados por la lógica del hardware de medición.
+    \item \textbf{Gestión y Exportación:} Procesa, organiza y exporta la información capturada hacia el espacio de usuario (\textit{user-space}) en el almacenamiento de Linux para su análisis y evaluación fuera de línea, eliminando la necesidad de realizar procesamiento intrusivo de trazabilidad en tiempo real.
+\end{itemize}
+
+Por su parte, en el dominio de la \textbf{Lógica Programable (PL)} residen los componentes de hardware que garantizan la predictibilidad matemática del software crítico bajo ensayo:
+\begin{itemize}
+    \item \textbf{Procesador Soft-core (Ibex):} Núcleo basado en la arquitectura RISC-V que ejecuta de manera exclusiva la aplicación bajo prueba. Al ejecutarse directamente en el tejido físico de la FPGA de forma aislada, es inmune a las interrupciones o cambios de contexto impredecibles característicos del sistema operativo del procesador ARM.
+    \item \textbf{Memoria Local (BRAM):} Implementada mediante bloques de RAM embebida dentro del propio integrado Zynq. Está configurada en modo \textit{True Dual Port} para satisfacer las exigencias de una arquitectura tipo Harvard, permitiendo que el procesador Ibex acceda concurrentemente al flujo de instrucciones de arranque y de datos de control en un único ciclo de reloj ($20\text{ ns}$ a $50\text{ MHz}$).
+    \item \textbf{Módulo de Monitoreo (Reporter):} Es el bloque personalizado que implementa el contador de alta velocidad y la lógica necesaria para espiar el bus de datos del SUT de forma transparente. Al detectar operaciones de almacenamiento específicas, captura los valores temporales exactos del reloj de hardware sin interponer demoras en el código bajo ejecución.
+\end{itemize}
+
+La comunicación e intercambio de información entre ambos mundos (\textit{hard-core} en el PS y \textit{soft-core} en la PL) se canaliza mediante el estándar de interconexión \textbf{AMBA AXI4} (principalmente en su variante optimizada para registros AXI4-Lite). A través de esta red, el procesador ARM mapea las direcciones físicas de la memoria local BRAM y los registros de estado del Reporter dentro de su propio mapa de direccionamiento virtual. Esto permite transferir comandos de arranque y descargar registros con alta velocidad, de forma controlada y sin degradar la fidelidad del análisis temporal.
+% =======================================================================
+% SECCIÓN 2: Preparación e Integración del Núcleo RISC-V
+% =======================================================================
+\section{Diseño e Integración del Subsistema RISC-V}
+
+La implementación física del Sistema Bajo Prueba (SUT) requiere instanciar el procesador \textit{soft-core} dentro del tejido lógico de la FPGA. Sin embargo, antes de proceder a la síntesis en Vivado, el código fuente del núcleo debe ser correctamente estructurado y empaquetado. 
+
+\subsection{Entorno de Desarrollo y Empaquetado del Núcleo}
+
+La preparación e integración del procesador Ibex requirió el establecimiento de un entorno de desarrollo basado en Linux. Para tal fin, se empleó el Subsistema de Windows para Linux (WSL, por sus siglas en inglés), lo que permitió operar con herramientas nativas de este sistema operativo sin necesidad de abandonar el sistema anfitrión.
+
+El núcleo Ibex, mantenido bajo el estándar de OpenTitan, consta de una vasta jerarquía de archivos fuente escritos en SystemVerilog. Debido a la complejidad arquitectónica y a la gran cantidad de dependencias cruzadas e inclusiones (\textit{includes}), la importación manual de estos componentes a un entorno de síntesis resulta altamente ineficiente y propensa a errores. Para resolver esta problemática, se implementó el uso de \textbf{FuseSoC}, un gestor de paquetes y herramienta de construcción (\textit{build tool}) especializado en lenguajes de descripción de hardware (HDL).
+
+A fines de garantizar la estabilidad, portabilidad y reproducibilidad del entorno de desarrollo, la instalación de la herramienta FuseSoC se llevó a cabo dentro de un entorno virtual de Python. Esta práctica de aislamiento previene conflictos entre las bibliotecas requeridas por el compilador HDL y los paquetes globales del sistema operativo anfitrión.
+
+Una vez configurado el entorno, se procedió a descargar el código fuente desde el repositorio oficial de Ibex. Posteriormente, se ejecutó FuseSoC apuntando al directorio raíz del proyecto. La herramienta analizó el manifiesto del núcleo, resolviendo de manera automatizada la jerarquía de los archivos, el orden lógico de compilación y todas las dependencias estructurales requeridas. 
+
+El resultado de este proceso de empaquetado fue la generación de un directorio de salida limpio (\texttt{build/ibex\_out/src/}), el cual consolidó exclusivamente los archivos SystemVerilog necesarios para el diseño. Dentro de este conjunto de archivos preprocesados, se expuso a \texttt{ibex\_top.sv} como el archivo de cabecera o entidad de nivel superior (\textit{top-level module}). Finalmente, este directorio fue exportado e importado como fuente de diseño en el entorno de AMD Vivado, permitiendo instanciar el núcleo RISC-V como un bloque funcional integro.
+
+\subsection{Encapsulamiento del Núcleo (Wrapper)}
+\label{ssec:wrapper_ibex}
+
+El núcleo RISC-V original (\texttt{ibex\_top.sv}), empaquetado y exportado mediante la herramienta FuseSoC, posee una extensa cantidad de puertos de entrada y salida (I/O). Gran parte de estos pines están diseñados para extensiones del estándar, depuración o verificación formal (RVFI), características que no son requeridas en la arquitectura de este proyecto. Dejar dichos pines desconectados o exponerlos directamente en el entorno de diseño por bloques de Vivado (\textit{Block Design}) resulta en una fuente recurrente de errores de síntesis (\textit{unconnected pins errors}) y genera un esquema visualmente inmanejable.
+
+Para mitigar esta problemática y garantizar una integración limpia en el hardware físico, se desarrolló una estrategia de encapsulamiento jerárquico estructurada en dos niveles modulares:
+
+\begin{itemize}
+    \item \textbf{Nivel de Subsistema (\texttt{ibex\_bram\_subsystem.sv}):} Este módulo de hardware, escrito en SystemVerilog, actúa como el primer nivel de abstracción. Su función principal es alojar internamente al procesador Ibex puro y acoplarlo físicamente con su memoria local (BRAM). En este bloque se enmascaran y terminan lógicamente todos los puertos I/O no utilizados del núcleo, resolviendo la complejidad interna de las conexiones. Como resultado, se consolida un subsistema de ``procesador más memoria'' completamente autocontenido.
+    
+    \item \textbf{Nivel de Integración (\texttt{ibex\_bram\_wrapper\_bd.v}):} Debido a que la herramienta \textit{IP Integrator} de Vivado presenta un comportamiento de síntesis y ruteo más robusto al interactuar con módulos de nivel superior (\textit{top-level}) descritos en lenguaje Verilog estándar, se desarrolló este segundo envoltorio (\textit{wrapper}). Este archivo instancia exclusivamente a \texttt{ibex\_bram\_subsystem.sv} y tiene el propósito estructural de exponer hacia el entorno gráfico del \textit{Block Design} únicamente las señales esenciales: los relojes, las señales de reinicio (\texttt{reset}) y las interfaces de datos dedicadas a la comunicación con el módulo Reporter.
+\end{itemize}
+
+Esta arquitectura jerárquica simplifica drásticamente la integración funcional del procesador dentro de la Lógica Programable (PL), previniendo errores de compilación y asegurando que las herramientas de AMD Xilinx solo gestionen las rutas de interconexión estrictamente necesarias para el ensayo.
+
+\subsection{Acondicionamiento de Reloj (Clock Wizard)}
+\label{ssec:clock_wizard}
+
+La estabilidad y precisión de la señal de sincronismo constituyen un requisito crítico y mandatorio para la plataforma HR-RT-Reporter. Dado que el sistema de trazabilidad calcula el desempeño del software mediante un contador de hardware de alta resolución, cualquier fluctuación frecuencial o fenómeno de \textit{jitter} degradaría la validez matemática de las marcas temporales (\textit{timestamps}) obtenidas. Para subsanar esta vulnerabilidad física, se integró el bloque de Propiedad Intelectual (IP) de AMD Xilinx denominado \textbf{Clocking Wizard}.
+
+El \textit{Clocking Wizard} utiliza los recursos lógicos analógicos dedicados del SoC Zynq-7000, específicamente un bucle de enganche de fase (PLL, \textit{Phase-Locked Loop}) y un administrador de reloj en modo mixto (MMCM, \textit{Mixed-Mode Clock Manager}). Este bloque toma como referencia el oscilador de cristal externo de $125\text{ MHz}$ de la placa de desarrollo Zybo y sintetiza una señal de reloj de salida estable y dedicada de $50\text{ MHz}$ para el dominio de la Lógica Programable (PL).
+
+La elección de una frecuencia de operación de $50\text{ MHz}$ obedece a dos factores de diseño fundamentales:
+\begin{enumerate}
+    \item \textbf{Resolución Temporal Estricta:} Permite que el contador interno del Módulo Reporter se incremente exactamente cada un ciclo de reloj, equivalente a un período discreto de $20\text{ ns}$. Esta resolución es más que suficiente para caracterizar las transiciones de estado en algoritmos de control de tiempo real.
+    \item \textbf{Relajación de Restricciones Temporales (\textit{Timing Constraints}):} Al operar a una frecuencia moderada en comparación con los límites del silicio, se facilita el proceso de enrutamiento y síntesis física de Vivado. Esto reduce drásticamente el riesgo de violación de tiempos de establecimiento (\textit{setup}) y retención (\textit{hold}) en los caminos críticos entre el procesador Ibex y el bus AXI.
+\end{enumerate}
+
+Un aspecto metodológico clave de esta configuración es la gestión de la señal de retroalimentación \texttt{locked} provista por el IP. Al energizar el sistema o al reconfigurar la FPGA, las salidas de reloj del MMCM experimentan un régimen transitorio inestable en el que la frecuencia de salida oscila antes de estabilizarse. La señal de hardware \texttt{locked} permanece en bajo (`0`) durante esta transición y se afirma en alto (`1`) de forma asíncrona únicamente cuando la señal de salida cumple con los márgenes estrictos de fase y frecuencia configurados.
+
+Para evitar que el subsistema de procesamiento inicie operaciones en un estado de reloj indeterminado (lo cual provocaría comportamientos erráticos o bloqueos lógicos irreversibles en el procesador RISC-V), se diseñó una barrera de seguridad lógica en el código de inicialización del sistema. La señal de reset interno del subsistema (\texttt{rst\_n}) se condiciona mediante una compuerta evaluada en hardware que combina la señal de reset controlada por el ARM (\texttt{rst\_pin}) y la señal de estabilidad del reloj (\texttt{locked}), como se describe en la ecuación \ref{eq:reset_logic}:
+
+\begin{equation}
+    \label{eq:reset_logic}
+    \text{rst\_n} = \neg(\text{rst\_pin}) \wedge \text{locked}
+\end{equation}
+                                                                            CHEQUEAR!!!!!!!!!!
+                                                                            
+Esta implementación garantiza que el procesador Ibex permanezca físicamente retenido en estado de reinicio activo bajo hasta que la señal de $50\text{ MHz}$ se encuentre completamente estabilizada y libre de transitorios. De este modo, la ejecución del firmware crítico inicia bajo condiciones de sincronismo óptimas y predecibles.
+
+% =======================================================================
+% SECCIÓN 3: Arquitectura de Memoria y Arbitraje
+% =======================================================================
+\section{Arquitectura de Memoria y Prevención de Colisiones}
+% Explicar cómo se le da memoria al Ibex y cómo se protege de accesos indebidos.
+\subsection{Memoria BRAM en Modo True Dual Port}
+\label{ssec:bram_dual_port}
+
+Para satisfacer las exigencias de baja latencia y aislar al núcleo Ibex de la congestión del bus principal del sistema (DDR3 externa), se optó por implementar la memoria local utilizando la primitiva \textit{Block RAM} (BRAM) interna de la FPGA. Esta memoria estática permite accesos en un único ciclo de reloj ($20\text{ ns}$ a $50\text{ MHz}$), asegurando un determinismo absoluto en la ejecución algorítmica.
+
+El procesador Ibex está basado en una arquitectura tipo Harvard, por lo que requiere buses físicamente separados para el flujo de instrucciones (\textit{Instruction Fetch}) y el flujo de datos (\textit{Load/Store}). Para acomodar esta topología en un único bloque físico, la BRAM fue configurada en modo \textbf{True Dual Port} (Doble Puerto Verdadero). La asignación lógica de los puertos se definió de la siguiente manera:
+\begin{itemize}
+    \item \textbf{Puerto A (Solo Lectura para SUT):} Se dedica exclusivamente a la obtención de instrucciones.
+    \item \textbf{Puerto B (Lectura/Escritura para SUT):} Se utiliza para la carga y almacenamiento de variables o punteros generados durante la ejecución del programa.
+\end{itemize}
+
+Además, la herramienta de síntesis fue configurada para aceptar un archivo de inicialización de coeficientes (\texttt{.coe}), el cual permite que la memoria BRAM se instancie con el firmware del Ibex pre-cargado desde el momento exacto en que se programa la FPGA (\textit{bitstream}), eliminando la necesidad de que el ARM transfiera el código de arranque rutinariamente.
+
+\subsubsection{Dimensionamiento y Configuración de Celdas}
+\label{sssec:bram_dimensions}
+
+El bloque de memoria local del procesador de prueba fue dimensionado de manera estricta para optimizar el uso de los recursos lógicos de la FPGA sin comprometer el espacio necesario para el firmware de ensayo. Las especificaciones de configuración del silicio se detallan a continuación:
+
+\begin{itemize}
+    \item \textbf{Ancho de Palabra del Bus (\textit{Data Width}):} Configurado nativamente en \textbf{$32\text{ bits}$}. Esto coincide exactamente con el tamaño de palabra de la arquitectura de la ISA RISC-V (RV32I) implementada por el núcleo Ibex, permitiendo transferencias completas de instrucciones y datos en un único ciclo sin necesidad de deserialización.
+    \item \textbf{Profundidad de Celdas (\textit{Memory Depth}):} Se fijó una profundidad de \textbf{$2048$ celdas} (posiciones de memoria discretas).                                                                                             <<<<-------------------- REVISAR LOS DATOS.
+    \item \textbf{Capacidad Total de Almacenamiento:} El producto de las dimensiones físicas ($2048 \text{ posiciones} \times 32 \text{ bits}$) equivale a un total de $65,536\text{ bits}$ de memoria interna. En términos de almacenamiento direccionable por bytes, esto representa una capacidad neta de \textbf{$8\text{ KiB}$}, dimensionada en estricta consonancia con las restricciones de direccionamiento asignadas en el bus del sistema.
+\end{itemize}
+
+\subsubsection{Mapeo Cruzado de Direcciones del Sistema}
+\label{sssec:memory_map}
+
+Debido a la naturaleza heterogénea de la plataforma, el mapa de memoria debe analizarse desde dos perspectivas lógicas completamente disjuntas. Por un lado, el procesador ARM (PS) visualiza el hardware embebido como periféricos esclavos mapeados en su espacio físico general a través del bus de interconexión AXI. Por otro lado, el núcleo Ibex (PL) posee su propio direccionamiento local de ejecución interna de $32\text{ bits}$ protegido por el hardware de exclusión mutua.
+
+En la Tabla \ref{tab:mapa_memoria} se detallan las direcciones base, los tamaños lógicos asignados en el \textit{Address Editor} de AMD Vivado y las funciones de cada bloque desde la perspectiva de ambos dominios de procesamiento.
+
+\begin{table}[htbp]
+\centering
+\caption{Mapa de direccionamiento de memoria unificado de la arquitectura heterogénea.}
+\label{tab:mapa_memoria}
+\begin{tabular}{llcl}
+\hline
+\textbf{Periférico / Interfaz} & \textbf{Master base Address}& \textbf{Range}& \textbf{Tamaño}\\ \hline
+AXI BRAM Controller            & \texttt{0x40000000}                                                                 & $8\text{ KB}$   & \texttt{0x00000000} (Local BRAM)                                                        \\
+AXI GPIO 0 (Reset SUT)         & \texttt{0x41200000}                                                                 & $64\text{ KB}$  & Inaccesible (Línea física \texttt{rst\_ni})                                            \\
+AXI GPIO 1 (LEDs Debug)        & \texttt{0x41210000}                                                                 & $64\text{ KB}$  & Inaccesible (Línea de diagnóstico)                                                     \\
+HR-RT-Reporter (IP Core)       & \texttt{0x43C00000}                                                                 & $64\text{ KB}$  & \texttt{0x80000000} (Registro Pasivo)                                                   \\ \hline
+\end{tabular}
+\end{table}
+
+Como se observa en la distribución de la tabla, la ventana del controlador de memoria \textit{AXI BRAM Controller} está dimensionada con un rango lógico de asignación de $8\text{ KB}$ en el bus ARM (restringido desde la dirección \texttt{0x40000000} hasta \texttt{0x40002000}), lo cual se acopla de manera simétrica con la capacidad física real de la memoria local direccionada por el Ibex a partir de su dirección interna \texttt{0x00000000}.
+
+De igual manera, el módulo de trazabilidad por hardware es accedido por el ARM para la extracción asíncrona de marcas de tiempo en la dirección física \texttt{0x43C00000}, mientras que el Ibex únicamente requiere escribir en la dirección de frontera \texttt{0x80000000} para activar instantáneamente los disparadores de captura sin provocar retrasos por contención de buses.
+
+% =======================================================================
+% COMPLEMENTO DE LA SECCIÓN 3: Exclusión Mutua
+% =======================================================================
+\subsection{Lógica de Exclusión Mutua (El MUX de Protección)}
+\label{ssec:exclusion_mutua}
+
+La coexistencia de dos procesadores con capacidades de acceso sobre el mismo bloque físico de memoria de doble puerto introduce un problema crítico de concurrencia y consistencia de datos. Si el sistema operativo Linux, ejecutado en el entorno ARM, intentara realizar una operación de lectura o escritura invasiva sobre la BRAM mientras el procesador Ibex se encuentra en pleno cómputo de un algoritmo de tiempo real, se producirían colisiones en los buses internos y condiciones de carrera (\textit{race conditions}). Este fenómeno corrompería de forma inmediata los registros del programa bajo análisis, invalidando la fidelidad del ensayo temporal.
+
+Para erradicar de forma absoluta esta vulnerabilidad sin introducir penalizaciones por software (\textit{overhead} de ejecución derivado del uso de semáforos lógicos), se diseñó e implementó un \textbf{Multiplexor de Exclusión Mutua por Hardware}. Este circuito de arbitraje asíncrono reside en el nivel superior del subsistema encapsulado (\texttt{ibex\_bram\_subsystem.sv}) y actúa como un cortafuegos en el silicio.
+
+El principio operativo del multiplexor se fundamenta en la monitorización continua del estado físico del procesador RISC-V a través de su señal de reinicio activo en bajo (\texttt{rst\_ni}). La lógica de control implementada discrimina el acceso a las líneas de habilitación de escritura del Puerto B (\texttt{bram\_we}) mediante la evaluación de las señales lógicas descritas en la ecuación \ref{eq:ternario_mux}:
+
+\begin{equation}
+    \label{eq:ternario_mux}
+    \text{bram\_we} = (\text{data\_we} \wedge \neg\text{sel\_ts}) \text{ ? } \text{4'b1111} : \text{4'b0000}
+\end{equation}
+
+A través de esta expresión ternaria evaluada en hardware puro, el sistema garantiza un comportamiento determinístico dividido en dos fases operativas estrictas:
+\begin{enumerate}
+    \item \textbf{Fase de Inyección y Diagnóstico ($\text{rst\_ni} = 0$):} Cuando el procesador ARM retiene al núcleo Ibex en estado de reset, el multiplexor concede privilegios de lectura y escritura totales al bus maestro AXI controlado por Linux. Esto permite que el sistema operativo inicialice la memoria, verifique la integridad de las líneas funcionales mediante patrones conocidos (e.g., comprobación del vector \texttt{0xCAFEBABE}) y prepare el entorno de prueba.
+    \item \textbf{Fase de Aislamiento y Ejecución ($\text{rst\_ni} = 1$):} En el instante exacto en que Linux libera el reset del soft-core para dar inicio al experimento, el multiplexor conmuta de forma asíncrona. El procesador ARM pierde instantáneamente todo privilegio de escritura sobre las celdas de la BRAM. Cualquier intento de acceso fortuito o erróneo desde el espacio de usuario (\textit{user-space}) en Linux es interceptado y lógicamente descartado por las compuertas lógicas, aislando por completo al bus local del Ibex (\texttt{data\_*}) y protegiendo el determinismo de la prueba con un impacto de intrusión nulo (efecto sonda cero).
+\end{enumerate}
+
+% =======================================================================
+% SECCIÓN 4: Módulo de Trazabilidad (HR-RT-Reporter)
+% =======================================================================
+\section{Diseño del Módulo AXI Reporter}
+% El corazón de la tesis. Cómo se capturan los eventos.
+
+\subsection{Generación de Timestamps por Hardware}
+% Detallar el contador de 64 bits a 50 MHz y por qué garantiza una resolución estricta de 20 ns sin depender del SO.
+
+\subsection{Mecanismo de Intercepción No Intrusiva (Efecto Sonda Nulo)}
+% Explicar cómo el wrapper espía el bus de datos y, al detectar una escritura en la dirección 0x80000000, captura el timestamp en 1 solo ciclo de reloj.
+
+% =======================================================================
+% SECCIÓN 5: Interconexión y Mapeo del Sistema
+% =======================================================================
+\section{Interconexión AXI y Mapa de Memoria}
+% Cómo se conectan el mundo físico (FPGA) y el mundo lógico (Linux).
+
+\subsection{Configuración de los Bloques AXI}
+% Mencionar el AXI Interconnect y las direcciones asignadas (Ej: 0x40000000 para BRAM, 0x41200000 para GPIO, 0x43C00000 para Reporter).
+
+\subsection{Gatillo de Arranque en Hardware (AXI GPIO)}
+% Explicar por qué el Ibex se mantiene en reset hasta que el ARM dispara explícitamente el inicio enviando un bit por GPIO.
+
+% =======================================================================
+% SECCIÓN 6: Implementación de Software y Despliegue
+% =======================================================================
+\section{Entorno de Software Operativo}
+% El paso del .xsa a la placa Zybo y el control desde Linux.
+
+\subsection{Empaquetado de Bootloader y Modificación del Device Tree}
+% Explicar la generación del BOOT.bin y la inclusión de "clk_ignore_unused" en los bootargs para que el Kernel no apague los relojes de la FPGA.
+
+\subsection{Control AXI desde Espacio de Usuario (User-Space)}
+% Justificar el uso de scripts en Python con mapeo de memoria (/dev/mem, mmap) en lugar de drivers de Kernel complejos.
+
+\subsection{Scripts de Validación y Recolección de Datos}
+% Describir el funcionamiento del script de inyección (gaty.py) y cómo Linux lee finalmente los timestamps desde las direcciones AXI.
