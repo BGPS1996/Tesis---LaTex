@@ -21,8 +21,212 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \usepackage{cleveref}
 \usepackage{paralist}
+\usepackage{listings}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage[utf8]{inputenc}
+
+\definecolor{bg}{rgb}{0.1, 0.1, 0.1}
+\definecolor{text}{rgb}{0.9, 0.9, 0.9}
+
+\lstdefinestyle{bashstyle}{
+language=bash,
+backgroundcolor=\color{bg},
+basicstyle=\ttfamily\color{text}\small,
+breaklines=true,
+showstringspaces=false,
+frame=none,
+numbers=none
+}
+
+\lstdefinestyle{verilogstyle}{
+    language=Verilog,
+    basicstyle=\ttfamily\footnotesize,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    stringstyle=\color{green!50!black},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    stepnumber=1,
+    numbersep=8pt,
+    frame=single,
+    breaklines=true,
+    breakatwhitespace=false,
+    showstringspaces=false,
+    tabsize=4,
+    morekeywords={
+    module,
+    endmodule,
+    interface,
+    endinterface,
+    package,
+    endpackage,
+    import,
+    export,
+    input,
+    output,
+    inout,
+    wire,
+    logic,
+    reg,
+    bit,
+    byte,
+    int,
+    integer,
+    longint,
+    shortint,
+    integer,
+    time,
+    parameter,
+    localparam,
+    typedef,
+    struct,
+    union,
+    enum,
+    assign,
+    always,
+    always_ff,
+    always_comb,
+    always_latch,
+    initial,
+    final,
+    begin,
+    end,
+    if,
+    else,
+    case,
+    casex,
+    casez,
+    unique,
+    priority,
+    default,
+    endcase,
+    for,
+    foreach,
+    while,
+    do,
+    repeat,
+    forever,
+    generate,
+    endgenerate,
+    genvar,
+    function,
+    endfunction,
+    task,
+    endtask,
+    return,
+    break,
+    continue,
+    posedge,
+    negedge,
+    and,
+    or,
+    xor,
+    xnor,
+    nand,
+    nor,
+    not,
+    buf,
+    signed,
+    unsigned,
+    assert,
+    assume,
+    cover,
+    property,
+    endproperty,
+    sequence,
+    endsequence,
+    clocking,
+    endclocking,
+    class,
+    endclass,
+    extends,
+    virtual,
+    new,
+    this,
+    super
+}}
 
 
+\lstdefinestyle{xdcstyle}{
+    language=tcl,
+    basicstyle=\ttfamily\footnotesize,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    stringstyle=\color{green!50!black},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    stepnumber=1,
+    numbersep=8pt,
+    frame=single,
+    breaklines=true,
+    showstringspaces=false,
+    tabsize=4,
+    morekeywords={
+        set_property,
+        get_ports,
+        get_cells,
+        get_pins,
+        get_nets,
+        current_design,
+        PACKAGE_PIN,
+        IOSTANDARD,
+        CONFIG_VOLTAGE,
+        CFGBVS,
+        LVCMOS33,
+        VCCO
+    }
+}
+\lstdefinestyle{dtsstyle}{
+    language=C,
+    basicstyle=\ttfamily\footnotesize,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    stringstyle=\color{green!50!black},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    stepnumber=1,
+    numbersep=8pt,
+    frame=single,
+    breaklines=true,
+    showstringspaces=false,
+    tabsize=4,
+    morekeywords={
+        compatible,
+        model,
+        status,
+        reg,
+        interrupts,
+        interrupt-parent,
+        clocks,
+        clock-names,
+        phandle,
+        device_type,
+        memory,
+        chosen,
+        aliases,
+        cpus,
+        cpu,
+        ranges,
+        gpio-controller,
+        gpio-cells,
+        interrupt-cells,
+        reset-gpios,
+        reset-controller,
+        reset-cells,
+        dma-cells,
+        stdout-path,
+        bootargs
+    }
+}
+\lstdefinestyle{treestyle}{
+    basicstyle=\ttfamily\small,
+    columns=flexible,
+    keepspaces=true,
+    showstringspaces=false,
+    frame=none,
+    breaklines=false
+}
 \begin{document}
 
 % Dentro del environment 'preliminary' va:
@@ -47,11 +251,13 @@ A toda esa otra gente que no
 %RAC : Runtime Assertion Checking
 %\end{abreviaturas}
 
-%\tableofcontents                %\'{I}ndice
+\tableofcontents                %\'{I}ndice
 
-%\listoffigures                  %Figuras
+\listoffigures                  %Figuras
 
-%\listoftables                   %Tablas
+\listoftables                   %Tablas
+
+\lstlistoflistings              %Codigos
 
 %\include{resumen}
 
@@ -62,9 +268,12 @@ A toda esa otra gente que no
 \input{cap1}
 \include{cap2}
 \include{cap3}
+\include{cap4}
+\include{cap5}
 
-%\appendix
-%\include{apend1}
+\appendix
+\include{apend1}
+\include{apend2_tablas}
 
 \begin{biblio}
 \bibliography{mibib,bibdatabase}

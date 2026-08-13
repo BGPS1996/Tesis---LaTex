@@ -1,0 +1,120 @@
+%\appendix
+
+\chapter{Detalle de las conexiones del sistema}
+\label{ap:conexiones}
+
+\section{Conexiones autogeneradas del sistema AXI}
+
+\begin{table}[!ht]
+    \centering
+    \caption{Conexiones autogeneradas del sistema AXI.}
+    \label{tab:autogenate conexion}
+    \begin{tabular}{|l|l|l|l|}
+    \hline
+        Bloque de origen & Pin de origen & Bloque de destino & Pin de destino \\ \hline
+        processing\_system7\_0 & M\_AXI\_GP0\_ACLK & processing\_system7\_0 & FCLK\_CLK0 \\ \hline
+        processing\_system7\_0 & M\_AXI\_GP0\_ACLK & rst\_ps7\_0\_50M & slowest\_sync\_clk \\ \hline
+        processing\_system7\_0 & M\_AXI\_GP0\_ACLK & axi\_reporter\_0 & s00\_axi\_aclk \\ \hline
+        processing\_system7\_0 & M\_AXI\_GP0\_ACLK & ps7\_0\_axi\_periph & ACLK \\ \hline
+        processing\_system7\_0 & M\_AXI\_GP0\_ACLK & ps7\_0\_axi\_periph & S00\_ACLK \\ \hline
+        processing\_system7\_0 & M\_AXI\_GP0\_ACLK & ps7\_0\_axi\_periph & M00\_ACLK \\ \hline
+        processing\_system7\_0 & M\_AXI\_GP0\_ACLK & ps7\_0\_axi\_periph & M01\_ACLK \\ \hline
+        processing\_system7\_0 & M\_AXI\_GP0\_ACLK & ps7\_0\_axi\_periph & M02\_ACLK \\ \hline
+        processing\_system7\_0 & M\_AXI\_GP0\_ACLK & axi\_gpio\_0 & s\_axi\_aclk \\ \hline
+        processing\_system7\_0 & M\_AXI\_GP0\_ACLK & axi\_gpio\_1 & s\_axi\_aclk \\ \hline
+        processing\_system7\_0 & M\_AXI\_GP0\_ACLK & axi\_bram\_ctrl\_0 & s\_axi\_aclk \\ \hline
+        processing\_system7\_0 & FCLK\_RESET0\_N & rst\_ps7\_0\_50M & ext\_reset\_in \\ \hline
+        processing\_system7\_0 & M\_AXI\_GP0 & ps7\_0\_axi\_periph & S00\_AXI \\ \hline
+        processing\_system7\_0 & FIXED\_IO & external port & FIXED\_IO \\ \hline
+        processing\_system7\_0 & DDR & external port & DDR \\ \hline
+        processing\_system7\_0 & FCLK\_CLK0 & ibex\_bram\_wrapper\_bd\_0 & bram\_clk\_a \\ \hline
+        rst\_ps7\_0\_50M & peripheral\_aresetn & ps7\_0\_axi\_periph & ARESETN \\ \hline
+        rst\_ps7\_0\_50M & peripheral\_aresetn & ps7\_0\_axi\_periph & S00\_ARESETN \\ \hline
+        rst\_ps7\_0\_50M & peripheral\_aresetn & ps7\_0\_axi\_periph & M00\_ARESETN \\ \hline
+        rst\_ps7\_0\_50M & peripheral\_aresetn & ps7\_0\_axi\_periph & M01\_ARESETN \\ \hline
+        rst\_ps7\_0\_50M & peripheral\_aresetn & ps7\_0\_axi\_periph & M02\_ARESETN \\ \hline
+        rst\_ps7\_0\_50M & peripheral\_aresetn & ps7\_0\_axi\_periph & M03\_ARESETN \\ \hline
+        rst\_ps7\_0\_50M & peripheral\_aresetn & axi\_gpio\_0 & s\_axi\_aresetn \\ \hline
+        rst\_ps7\_0\_50M & peripheral\_aresetn & axi\_gpio\_1 & s\_axi\_aresetn \\ \hline
+        rst\_ps7\_0\_50M & peripheral\_aresetn & axi\_bram\_ctrl\_0 & s\_axi\_aresetn \\ \hline
+        ps7\_0\_axi\_periph & M00\_AXI & axi\_gpio\_0 & S\_AXI \\ \hline
+        ps7\_0\_axi\_periph & M02\_AXI & axi\_gpio\_1 & S\_AXI \\ \hline
+        ps7\_0\_axi\_periph & M03\_AXI & axi\_bram\_ctrl\_0 & S\_AXI \\ \hline
+    \end{tabular}
+\end{table}
+
+\section{Conexiones de reloj y reset}
+
+\begin{table}[!ht]
+    \centering
+    \caption{Conexiones específicas de reloj y reset del sistema.}
+    \label{tab:clock_reset}
+    \begin{tabular}{|l|l|l|l|}
+    \hline
+        Bloque de origen & Pin de origen & Bloque de destino & Pin de destino \\ \hline
+        processing\_system7\_0 & FCLK\_CLK0 & ibex\_bram\_wrapper\_bd\_0 & clk\_i \\ \hline
+        processing\_system7\_0 & FCLK\_CLK0 & ibex\_bram\_wrapper\_bd\_0 & bram\_clk\_a \\ \hline
+        processing\_system7\_0 & FCLK\_CLK0 & axi\_reporter\_0 & s00\_axi\_aclk \\ \hline
+        axi\_gpio\_0 & gpio\_io\_o & ibex\_bram\_wrapper\_bd\_0 & rst\_ni \\ \hline
+    \end{tabular}
+\end{table}
+
+\section{Interfaz ARM--BRAM}
+
+\begin{table}[!ht]
+    \centering
+    \caption{Interconexión de la interfaz ARM con el subsistema BRAM de Ibex.}
+    \label{tab:arm_bram}
+    \begin{tabular}{|l|l|l|l|}
+    \hline
+        Bloque de origen & Pin de origen & Bloque de destino & Pin de destino \\ \hline
+        axi\_bram\_ctrl\_0 & bram\_clk\_a & ibex\_bram\_wrapper\_bd\_0 & bram\_clk\_a \\ \hline
+        axi\_bram\_ctrl\_0 & bram\_en\_a & ibex\_bram\_wrapper\_bd\_0 & bram\_en\_a \\ \hline
+        axi\_bram\_ctrl\_0 & bram\_we\_a[3:0] & ibex\_bram\_wrapper\_bd\_0 & bram\_we\_a[3:0] \\ \hline
+        axi\_bram\_ctrl\_0 & bram\_addr\_a[12:0] & ibex\_bram\_wrapper\_bd\_0 & bram\_addr\_a[12:0] \\ \hline
+        axi\_bram\_ctrl\_0 & bram\_wrdata\_a[31:0] & ibex\_bram\_wrapper\_bd\_0 & bram\_wrdata\_a[31:0] \\ \hline
+        axi\_bram\_ctrl\_0 & bram\_rdata\_a[31:0] & ibex\_bram\_wrapper\_bd\_0 & reporter\_rdata[31:0] \\ \hline
+        axi\_bram\_ctrl\_0 & bram\_rdata\_a[31:0] & ibex\_bram\_wrapper\_bd\_0 & ibex\_rdata\_o[31:0] \\ \hline
+        processing\_system7\_0 & M\_AXI\_GP0\_ACLK & ibex\_bram\_wrapper\_bd\_0 & clk\_i \\ \hline
+        axi\_gpio\_0 & gpio\_io\_i[3:0] & ibex\_bram\_wrapper\_bd\_0 & rst\_ni \\ \hline
+        axi\_reporter\_0 & ibex\_rdata\_o[31:0] & ibex\_bram\_wrapper\_bd\_0 & reporter\_rdata\_i[31:0] \\ \hline
+    \end{tabular}
+\end{table}
+
+\section{Interconexión del AXI Reporter}
+
+\begin{table}[!ht]
+    \centering
+    \caption{Conexiones de entrada y salida del bloque \texttt{axi\_reporter\_0}.}
+    \label{tab:ibex_bram-reporter}
+    \begin{tabular}{|l|l|l|l|}
+    \hline
+        Bloque de origen & Pin de origen & Bloque de destino & Pin de destino \\ \hline
+        ibex\_bram\_wrapper\_bd\_0 & reporter\_req\_o & axi\_reporter\_0 & ibex\_req\_i \\ \hline
+        ibex\_bram\_wrapper\_bd\_0 & reporter\_addr\_o[31:0] & axi\_reporter\_0 & ibex\_addr\_i[31:0] \\ \hline
+        ibex\_bram\_wrapper\_bd\_0 & reporter\_we\_o & axi\_reporter\_0 & ibex\_we\_i \\ \hline
+        ibex\_bram\_wrapper\_bd\_0 & reporter\_wdata\_o[31:0] & axi\_reporter\_0 & ibex\_wdata\_i[31:0] \\ \hline
+        ps7\_0\_axi\_periph & M01\_AXI & axi\_reporter\_0 & S00\_AXI \\ \hline
+        processing\_system7\_0 & FCLK\_CLK0 & axi\_reporter\_0 & s00\_axi\_aclk \\ \hline
+        rst\_ps7\_0\_50M & peripheral\_aresetn[0:0] & axi\_reporter\_0 & s00\_axi\_aresetn \\ \hline
+    \end{tabular}
+\end{table}
+
+\section{Periféricos de entrada y salida}
+
+\begin{table}[!ht]
+    \centering
+    \caption{Conexiones de entrada y salida del bloque \texttt{axi\_reporter\_0}.}
+    \label{tab:ibex_bram-reporter}
+    \begin{tabular}{|l|l|l|l|}
+    \hline
+        Bloque de origen & Pin de origen & Bloque de destino & Pin de destino \\ \hline
+        ibex\_bram\_wrapper\_bd\_0 & reporter\_req\_o & axi\_reporter\_0 & ibex\_req\_i \\ \hline
+        ibex\_bram\_wrapper\_bd\_0 & reporter\_addr\_o[31:0] & axi\_reporter\_0 & ibex\_addr\_i[31:0] \\ \hline
+        ibex\_bram\_wrapper\_bd\_0 & reporter\_we\_o & axi\_reporter\_0 & ibex\_we\_i \\ \hline
+        ibex\_bram\_wrapper\_bd\_0 & reporter\_wdata\_o[31:0] & axi\_reporter\_0 & ibex\_wdata\_i[31:0] \\ \hline
+        ps7\_0\_axi\_periph & M01\_AXI & axi\_reporter\_0 & S00\_AXI \\ \hline
+        processing\_system7\_0 & FCLK\_CLK0 & axi\_reporter\_0 & s00\_axi\_aclk \\ \hline
+        rst\_ps7\_0\_50M & peripheral\_aresetn[0:0] & axi\_reporter\_0 & s00\_axi\_aresetn \\ \hline
+    \end{tabular}
+\end{table}

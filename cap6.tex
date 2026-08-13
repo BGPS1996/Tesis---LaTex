@@ -1,0 +1,44 @@
+\chapter{Conclusiones y Limitaciones de la Arquitectura}
+
+\subsubsection{Limitaciones de la Arquitectura}
+\label{sssec:conclusion_arquitectura}
+
+El análisis derivado de la ejecución del ecosistema de scripts permitió validar, en un entorno de pruebas real, el comportamiento integral de la arquitectura HR-RT-Reporter. Se comprobó exitosamente la interoperabilidad entre el Sistema de Procesamiento (PS) y la Lógica Programable (PL) a través de la red de interconexión AXI, así como la efectividad del multiplexor de exclusión mutua en hardware. Sin embargo, la etapa de integración también expuso las siguientes limitaciones inherentes al diseño de la plataforma experimental:
+
+\begin{enumerate}
+    \item \textbf{Capacidad de Almacenamiento Restringida (BRAM):} Para garantizar un determinismo estricto temporal y una baja latencia (accesos en un solo ciclo de reloj de $20\text{ ns}$), el Sistema Bajo Prueba (SUT) opera exclusivamente sobre la memoria interna de la FPGA. Al estar la BRAM dimensionada en $8\text{ KiB}$ ($2048$ celdas de $32\text{ bits}$), existe una limitación rígida sobre la huella de memoria (\textit{memory footprint}) de los algoritmos de control que pueden ser ensayados. El núcleo Ibex carece de acceso a la memoria externa DDR3 para preservar su aislamiento físico.
+    
+    \item \textbf{Dependencia de Instrumentación Explícita:} Aunque la arquitectura logra mitigar exitosamente el ``efecto sonda`` al eliminar las penalizaciones por bloqueos de bus o interrupciones del sistema operativo, el mecanismo de captura de eventos sigue requiriendo que el código fuente (C/C++) sea instrumentado. El programa debe ejecutar explícitamente una instrucción de almacenamiento (\texttt{sw}) hacia la dirección virtual \texttt{0x80000000}. Esto implica que el binario ensayado difiere ligeramente del binario final de producción, lo cual es una concesión arquitectónica.
+
+    \end{enumerate}
+
+
+    A continuacion el diagrama en bloques:
+    \begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth*1,3]{figs/design_3_recortado.pdf}
+    
+    \caption{Diagrama de bloques general (\textit{Block Design}) sintetizado en AMD Vivado para la arquitectura heterogénea HR-RT-Reporter.}
+    \label{fig:vivado_block_design}
+\end{figure}
+La Figura \ref{fig:vivado_block_design} ilustra la topología completa del diseño por bloques (\textit{Block Design}) implementado en el entorno AMD Vivado. En ella se aprecia la integración física entre el Sistema de Procesamiento (\textit{Processing System} - PS) y los periféricos instanciados en el tejido de la Lógica Programable (\textit{Programmable Logic} - PL).
+
+A nivel microarquitectónico, el esquema se articula a través de los siguientes bloques e interfaces funcionales fundamentales:
+
+\begin{itemize}
+    \item \textbf{Procesador Maestro (\texttt{processing\_system7\_0}):} Representa el bloque duro Zynq-7000 PS. Exporta la interfaz maestra de propósito general AXI4-Lite (\texttt{M\_AXI\_GP0}), desde la cual el sistema operativo Linux gobierna la totalidad de los periféricos esclavos en la PL.
+    
+    \item \textbf{Red de Interconexión AXI (\texttt{ps7\_0\_axi\_periph}):} Actúa como la matriz de conmutación y arbitraje (\textit{AXI Interconnect}). Recibe las peticiones del procesador ARM y las rutea hacia las direcciones físicas de los esclavos mapeados (\texttt{axi\_bram\_ctrl\_0}, \texttt{axi\_gpio\_0}, \texttt{axi\_gpio\_1} y \texttt{axi\_reporter\_0}).
+
+    \item \textbf{Controlador de Memoria (\texttt{axi\_bram\_ctrl\_0}):} Mapeado en la dirección \texttt{0x40000000}, proporciona la interfaz de conversión entre el protocolo AXI4-Lite del ARM y los buses nativos de la memoria BRAM del subsistema Ibex.
+
+    \item \textbf{Gatillo de Reset y Diagnóstico (\texttt{axi\_gpio\_0} y \texttt{axi\_gpio\_1}):}
+    \begin{itemize}
+        \item \texttt{axi\_gpio\_0} (\texttt{0x41200000}): Canal AXI GPIO de 1 bit cuya salida controla directamente la línea física de reinicio activo en bajo (\texttt{rst\_ni}) del subsistema RISC-V, funcionando como el disparador del experimento controlado desde Linux.
+        \item \texttt{axi\_gpio\_1} (\texttt{0x41210000}): Canal de 4 bits acoplado a los diodos emisores de luz (LEDs) de la placa Zybo para la verificación visual del estado operativo del hardware.
+    \end{itemize}
+
+    \item \textbf{Subsistema RISC-V Encapsulado (\texttt{ibex\_bram\_wrapper\_bd\_0}):} Módulo envoltorio que aloja al procesador soft-core Ibex, la memoria BRAM de $8\text{ KiB}$ en modo \textit{True Dual Port} y el multiplexor de exclusión mutua en hardware. Este bloque aísla la complejidad interna del procesador RISC-V expuesta hacia el lienzo gráfico de Vivado.
+
+    \item \textbf{Módulo de Trazabilidad (\texttt{axi\_reporter\_0}):} Periférico personalizado mapeado en la dirección \texttt{0x43C00000}. Contiene el contador de alta resolución a $50\text{ MHz}$ ($20\text{ ns}$) y la lógica de intercepción pasiva que captura marcas temporales ante accesos a la dirección virtual de frontera \texttt{0x80000000} sin introducir penalizaciones por contención de buses.
+\end{itemize}

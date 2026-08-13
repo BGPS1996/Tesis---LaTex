@@ -1,6 +1,6 @@
 %!TEX root = ./main.tex
 \chapter{Introducción}
-%\chapterquote{Hablaban siempre de dinero y planeaban asaltar un banco}{Domingo Cavallo, 2001}
+
 
 \section{Problemática a abordar}
 \label{S:planteamiento de problema}
@@ -108,32 +108,33 @@ Diseñar un setup que sea capaz de trackear registros de interes, permitiendo co
 \begin{itemize}
 \item Adquirir y sistematizar la información técnica necesaria para la correcta selección del \textit{setup} experimental, evaluando distintas opciones de placa, configuraciones de hardware y herramientas de desarrollo.
         
-\item Diseñar e implementar un módulo de comunicación entre el \textit{soft-core} y el procesador ARM, garantizando la transferencia de datos en tiempo real y la sincronización de eventos.
-
-\begin{figure}[H]
-		\centering
-		\includegraphics[width=0.65\textwidth]{figs/Diagram_architecture_general.png}
-		\caption{Diagrama propuesto para la arquitectura general}
-		\label{fig1}
-	\end{figure}
+\item Diseñar e implementar un módulo de comunicación entre el \textit{soft-core} y el procesador ARM, garantizando la transferencia de datos en tiempo real y la sincronización de eventos.\ref{fig1}
 
 \item Evaluar el desempeño del sistema implementado, midiendo métricas como latencia de comunicación, capacidad de respuesta y confiabilidad en la captura de eventos.
 \end{itemize}
 
+\begin{figure}[H]
+		\centering
+		\includegraphics[width=0.8\textwidth]{figs/Diagram_architecture_general.png}
+		\caption{Diagrama propuesto para la arquitectura general}
+		\label{fig1}
+	\end{figure}
+\pagebreak
+
 \section{Estructura del Documento}
 \label{S:estructura-documento}
-
 El presente Proyecto Final Integrador se estructura en capítulos que describen el desarrollo, la implementación y la validación del sistema HR-RT-Reporter:
-
 \begin{itemize}
-    
+
     \item \textbf{Capítulo 2. Marco Teórico:} Sistematiza la información técnica necesaria, incluyendo la revisión de literatura, la investigación sobre arquitecturas FPGA-ARM, el estudio de la precisión de los \textit{timestamps} y la selección del \textit{soft-core} y el sistema operativo.
-    
+
     \item \textbf{Capítulo 3. Metodología y Diseño:} Detalla el enfoque metodológico, la síntesis del procesador \textit{soft-core}, la configuración del sistema operativo Linux y el diseño del Módulo Reporter (hardware y lógica de gestión de eventos).
-    
-    \item \textbf{Capítulo 4. Implementación y Resultados:} Describe la integración del sistema completo y presenta la ejecución de pruebas de laboratorio. Incluye la evaluación del desempeño, la velocidad de respuesta y la confiabilidad en la comunicación.
-    
-    \item \textbf{Capítulo 5. Conclusiones y Trabajo Futuro:} Recapitula los resultados obtenidos, establece el grado de verificación de la hipótesis, determina el cumplimiento de los objetivos y sugiere líneas de investigación y desarrollo futuras.
+
+    \item \textbf{Capítulo 4. Implementación del Entorno de Desarrollo y Adquisición del Núcleo RISC-V:} Describe la puesta en marcha del entorno de herramientas (FuseSoC, AMD Vivado y Xilinx Vitis), la integración del núcleo Ibex en el diagrama de bloques, la generación del \textit{bitstream} y la configuración del sistema operativo Linux embebido sobre el procesador ARM.
+
+    \item \textbf{Capítulo 5. Ensayos y Resultados:} Presenta la ejecución de las pruebas de laboratorio sobre el sistema integrado, evaluando el desempeño, la latencia de comunicación, la precisión de los \textit{timestamps} obtenidos y la confiabilidad en la captura de eventos.
+
+    \item \textbf{Capítulo 6. Conclusiones y Trabajo Futuro:} Recapitula los resultados obtenidos, establece el grado de verificación de la hipótesis, determina el cumplimiento de los objetivos y sugiere líneas de investigación y desarrollo futuras.
 \end{itemize}
 
 %%% Local Variables: 
