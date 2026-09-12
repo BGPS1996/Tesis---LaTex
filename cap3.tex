@@ -72,30 +72,61 @@ Para mitigar esta problemática y garantizar una integración limpia en el hardw
 
 Esta arquitectura jerárquica simplifica drásticamente la integración funcional del procesador dentro de la Lógica Programable (PL), previniendo errores de compilación y asegurando que las herramientas de AMD Xilinx solo gestionen las rutas de interconexión estrictamente necesarias para el ensayo.
 
-\subsection{Acondicionamiento de Reloj (Clock Wizard)}
+\subsection{Distribución y Sincronización de Dominios de Reloj}
 \label{ssec:clock_wizard}
+A diferencia de un esquema centralizado en el que un único IP de tipo
+\textit{Clocking Wizard} (MMCM/PLL) sintetiza todos los relojes del
+sistema a partir de un oscilador externo, la arquitectura final no
+instancia ningún bloque de acondicionamiento de reloj en la lógica
+programable: los dos relojes utilizados, de 50MHz y 100MHz, se obtienen
+directamente de las salidas \texttt{FCLK\_CLK1} y \texttt{FCLK\_CLK0} del
+bloque \texttt{processing\_system7\_0}, generadas internamente por el
+Procesador de Sistema (PS7) y configuradas mediante los parámetros
+\texttt{PCW\_FPGA1\_PERIPHERAL\_FREQMHZ=50} y
+\texttt{PCW\_FPGA0\_PERIPHERAL\_FREQMHZ=100} respectivamente. El reloj de
+50MHz (\texttt{FCLK\_CLK1}) alimenta exclusivamente al subsistema
+Ibex+BRAM (\texttt{ibex\_bram\_wrapper\_bd\_0/clk\_i}), mientras que el
+reloj de 100MHz (\texttt{FCLK\_CLK0}) alimenta exclusivamente al
+periférico Reporter (\texttt{axi\_reporter\_0/s00\_axi\_aclk}). El reinicio
+(\textit{reset}) del núcleo Ibex, por su parte, no depende de ninguna
+señal de \textit{locked} de un PLL -- inexistente en este diseño -- sino
+que es controlado explícitamente por software a través de un canal AXI
+GPIO (\texttt{axi\_gpio\_0}), permitiendo a Linux mantener el núcleo en
+reposo hasta el instante deseado para iniciar una nueva corrida
+experimental. El cruce de información entre ambos dominios de reloj no se
+resuelve mediante colas de aislamiento (FIFOs asíncronas), sino mediante
+un esquema de dos etapas complementarias: del lado del Ibex, un par de
+registros \textit{sticky} (\texttt{reporter\_addr\_hold} y
+\texttt{reporter\_wdata\_hold}) retienen la dirección y el dato de la
+última escritura real hasta la siguiente, garantizando que permanezcan
+estables el tiempo suficiente para ser observados de forma segura desde
+el otro dominio; del lado del Reporter, una cadena sincronizadora de tres
+\textit{flip-flops} resuelve el pulso de escritura entrante, exponiendo
+además, con fines de diagnóstico, un camino paralelo de un único
+\textit{flip-flop} sin sincronizar (véanse los registros
+\texttt{DBG\_RAW\_COUNT} y \texttt{DBG\_SYNC\_COUNT} de la
+Tabla~\ref{tab:mapa_registros_reporter}) que permite contrastar, en
+operación normal, que ningún evento se pierda por metaestabilidad.
+%La estabilidad y precisión de la señal de sincronismo constituyen un requisito crítico y mandatorio para la plataforma HR-RT-Reporter. Dado que el sistema de trazabilidad calcula el desempeño del software mediante un contador de hardware de alta resolución, cualquier fluctuación frecuencial o fenómeno de \textit{jitter} degradaría la validez matemática de las marcas temporales (\textit{timestamps}) obtenidas. Para subsanar esta vulnerabilidad física, se integró el bloque de Propiedad Intelectual (IP) de AMD Xilinx denominado \textbf{Clocking Wizard}.
 
-La estabilidad y precisión de la señal de sincronismo constituyen un requisito crítico y mandatorio para la plataforma HR-RT-Reporter. Dado que el sistema de trazabilidad calcula el desempeño del software mediante un contador de hardware de alta resolución, cualquier fluctuación frecuencial o fenómeno de \textit{jitter} degradaría la validez matemática de las marcas temporales (\textit{timestamps}) obtenidas. Para subsanar esta vulnerabilidad física, se integró el bloque de Propiedad Intelectual (IP) de AMD Xilinx denominado \textbf{Clocking Wizard}.
+%El \textit{Clocking Wizard} utiliza los recursos lógicos analógicos dedicados del SoC Zynq-7000, específicamente un bucle de enganche de fase (PLL, \textit{Phase-Locked Loop}) y un administrador de reloj en modo mixto (MMCM, \textit{Mixed-Mode Clock Manager}). Este bloque toma como referencia el oscilador de cristal externo de $125\text{ MHz}$ de la placa de desarrollo Zybo y sintetiza una señal de reloj de salida estable y dedicada de $50\text{ MHz}$ para el dominio de la Lógica Programable (PL).
 
-El \textit{Clocking Wizard} utiliza los recursos lógicos analógicos dedicados del SoC Zynq-7000, específicamente un bucle de enganche de fase (PLL, \textit{Phase-Locked Loop}) y un administrador de reloj en modo mixto (MMCM, \textit{Mixed-Mode Clock Manager}). Este bloque toma como referencia el oscilador de cristal externo de $125\text{ MHz}$ de la placa de desarrollo Zybo y sintetiza una señal de reloj de salida estable y dedicada de $50\text{ MHz}$ para el dominio de la Lógica Programable (PL).
+%La elección de una frecuencia de operación de $50\text{ MHz}$ obedece a dos factores de diseño fundamentales:
+%\begin{enumerate}
+%    \item \textbf{Resolución Temporal Estricta:} Permite que el contador interno del Módulo Reporter se incremente exactamente cada un ciclo de reloj, equivalente a un período discreto de $20\text{ ns}$. Esta resolución es más que suficiente para caracterizar las transiciones de estado en algoritmos de control de tiempo real.
+%    \item \textbf{Relajación de Restricciones Temporales (\textit{Timing Constraints}):} Al operar a una frecuencia moderada en comparación con los límites del silicio, se facilita el proceso de enrutamiento y síntesis física de Vivado. Esto reduce drásticamente el riesgo de violación de tiempos de establecimiento (\textit{setup}) y retención (\textit{hold}) en los caminos críticos entre el procesador Ibex y el bus AXI.
+%\end{enumerate}
 
-La elección de una frecuencia de operación de $50\text{ MHz}$ obedece a dos factores de diseño fundamentales:
-\begin{enumerate}
-    \item \textbf{Resolución Temporal Estricta:} Permite que el contador interno del Módulo Reporter se incremente exactamente cada un ciclo de reloj, equivalente a un período discreto de $20\text{ ns}$. Esta resolución es más que suficiente para caracterizar las transiciones de estado en algoritmos de control de tiempo real.
-    \item \textbf{Relajación de Restricciones Temporales (\textit{Timing Constraints}):} Al operar a una frecuencia moderada en comparación con los límites del silicio, se facilita el proceso de enrutamiento y síntesis física de Vivado. Esto reduce drásticamente el riesgo de violación de tiempos de establecimiento (\textit{setup}) y retención (\textit{hold}) en los caminos críticos entre el procesador Ibex y el bus AXI.
-\end{enumerate}
+%Un aspecto metodológico clave de esta configuración es la gestión de la señal de retroalimentación \texttt{locked} provista por el IP. Al energizar el sistema o al reconfigurar la FPGA, las salidas de reloj del MMCM experimentan un régimen transitorio inestable en el que la frecuencia de salida oscila antes de estabilizarse. La señal de hardware \texttt{locked} permanece en bajo (`0`) durante esta transición y se afirma en alto (`1`) de forma asíncrona únicamente cuando la señal de salida cumple con los márgenes estrictos de fase y frecuencia configurados.
 
-Un aspecto metodológico clave de esta configuración es la gestión de la señal de retroalimentación \texttt{locked} provista por el IP. Al energizar el sistema o al reconfigurar la FPGA, las salidas de reloj del MMCM experimentan un régimen transitorio inestable en el que la frecuencia de salida oscila antes de estabilizarse. La señal de hardware \texttt{locked} permanece en bajo (`0`) durante esta transición y se afirma en alto (`1`) de forma asíncrona únicamente cuando la señal de salida cumple con los márgenes estrictos de fase y frecuencia configurados.
+%Para evitar que el subsistema de procesamiento inicie operaciones en un estado de reloj indeterminado (lo cual provocaría comportamientos erráticos o bloqueos lógicos irreversibles en el procesador RISC-V), se diseñó una barrera de seguridad lógica en el código de inicialización del sistema. La señal de reset interno del subsistema (\texttt{rst\_n}) se condiciona mediante una compuerta evaluada en hardware que combina la señal de reset controlada por el ARM (\texttt{rst\_pin}) y la señal de estabilidad del reloj (\texttt{locked}), como se describe en la ecuación \ref{eq:reset_logic}:
 
-Para evitar que el subsistema de procesamiento inicie operaciones en un estado de reloj indeterminado (lo cual provocaría comportamientos erráticos o bloqueos lógicos irreversibles en el procesador RISC-V), se diseñó una barrera de seguridad lógica en el código de inicialización del sistema. La señal de reset interno del subsistema (\texttt{rst\_n}) se condiciona mediante una compuerta evaluada en hardware que combina la señal de reset controlada por el ARM (\texttt{rst\_pin}) y la señal de estabilidad del reloj (\texttt{locked}), como se describe en la ecuación \ref{eq:reset_logic}:
-
-\begin{equation}
-    \label{eq:reset_logic}
-    \text{rst\_n} = \neg(\text{rst\_pin}) \wedge \text{locked}
-\end{equation}
-                                                                            CHEQUEAR!!!!!!!!!!
-                                                                            
-Esta implementación garantiza que el procesador Ibex permanezca físicamente retenido en estado de reinicio activo bajo hasta que la señal de $50\text{ MHz}$ se encuentre completamente estabilizada y libre de transitorios. De este modo, la ejecución del firmware crítico inicia bajo condiciones de sincronismo óptimas y predecibles.
+%\begin{equation}
+%    \label{eq:reset_logic}
+%    \text{rst\_n} = \neg(\text{rst\_pin}) \wedge \text{locked}
+%\end{equation}
+     
+%Esta implementación garantiza que el procesador Ibex permanezca físicamente retenido en estado de reinicio activo bajo hasta que la señal de $50\text{ MHz}$ se encuentre completamente estabilizada y libre de transitorios. De este modo, la ejecución del firmware crítico inicia bajo condiciones de sincronismo óptimas y predecibles.
 
 % =======================================================================
 % SECCIÓN 3: Arquitectura de Memoria y Arbitraje
@@ -105,7 +136,28 @@ Esta implementación garantiza que el procesador Ibex permanezca físicamente re
 \subsection{Memoria BRAM en Modo True Dual Port}
 \label{ssec:bram_dual_port}
 
-Para satisfacer las exigencias de baja latencia y aislar al núcleo Ibex de la congestión del bus principal del sistema (DDR3 externa), se optó por implementar la memoria local utilizando la primitiva \textit{Block RAM} (BRAM) interna de la FPGA. Esta memoria estática permite accesos en un único ciclo de reloj ($20\text{ ns}$ a $50\text{ MHz}$), asegurando un determinismo absoluto en la ejecución algorítmica.
+La memoria de bloque (\textit{Block RAM}) que almacena las instrucciones
+del núcleo Ibex se generó a partir de la primitiva \texttt{blk\_mem\_gen}
+v8.4 de Xilinx, configurada con registro de salida habilitado en ambos
+puertos (\texttt{C\_HAS\_MEM\_OUTPUT\_REGS\_A} y
+\texttt{C\_HAS\_MEM\_OUTPUT\_REGS\_B} en 1). Esta configuración, elegida
+para maximizar la frecuencia máxima alcanzable del diseño, introduce una
+latencia real de \textbf{dos ciclos de reloj} entre la presentación de una
+dirección válida y la disponibilidad del dato correspondiente a la
+salida, en contraposición a la latencia de un único ciclo con la que se
+había modelado inicialmente la señal de válido de lectura
+(\texttt{instr\_rvalid\_q}/\texttt{data\_rvalid\_q}) en
+\texttt{ibex\_bram\_subsystem.sv}. Este desajuste de un ciclo resulta
+invisible durante una secuencia de \textit{fetch} puramente secuencial,
+donde tanto la dirección como el dato avanzan de a uno por ciclo sin
+huecos, pero se vuelve crítico inmediatamente después de cualquier salto o
+bifurcación tomada: el primer \textit{fetch} posterior a la redirección
+del contador de programa termina capturando el dato correspondiente a la
+solicitud \textit{anterior}, todavía en tránsito dentro de la memoria, en
+lugar del correspondiente a la nueva dirección. La corrección consistió en
+modelar la señal de válido mediante una cadena de dos \textit{flip-flops}
+en cascada, en lugar de uno solo, replicando fielmente la latencia real de
+la primitiva de memoria instanciada.
 
 El procesador Ibex está basado en una arquitectura tipo Harvard, por lo que requiere buses físicamente separados para el flujo de instrucciones (\textit{Instruction Fetch}) y el flujo de datos (\textit{Load/Store}). Para acomodar esta topología en un único bloque físico, la BRAM fue configurada en modo \textbf{True Dual Port} (Doble Puerto Verdadero). La asignación lógica de los puertos se definió de la siguiente manera:
 \begin{itemize}
@@ -139,11 +191,11 @@ En la Tabla \ref{tab:mapa_memoria} se detallan las direcciones base, los tamaño
 \label{tab:mapa_memoria}
 \begin{tabular}{llcl}
 \hline
-\textbf{Periférico / Interfaz} & \textbf{Master base Address}& \textbf{Range}& \textbf{Tamaño}\\ \hline
-AXI BRAM Controller            & \texttt{0x40000000}                                                                 & $8\text{ KB}$   & \texttt{0x00000000} (Local BRAM)                                                        \\
-AXI GPIO 0 (Reset SUT)         & \texttt{0x41200000}                                                                 & $64\text{ KB}$  & Inaccesible (Línea física \texttt{rst\_ni})                                            \\
-AXI GPIO 1 (LEDs Debug)        & \texttt{0x41210000}                                                                 & $64\text{ KB}$  & Inaccesible (Línea de diagnóstico)                                                     \\
-HR-RT-Reporter (IP Core)       & \texttt{0x43C00000}                                                                 & $64\text{ KB}$  & \texttt{0x80000000} (Registro Pasivo)                                                   \\ \hline
+\textbf{Periférico / Interfaz} & \textbf{Master base Address}	& \textbf{Range}	& \textbf{Acceso desde Ibex}				\\ \hline
+AXI BRAM Controller            & \texttt{0x40000000}		& $8\text{ KB}$		& \texttt{0x00000000} (Local BRAM)		\\
+AXI GPIO 0 (Reset SUT)         & \texttt{0x41200000}		& $64\text{ KB}$	& Inaccesible (Línea física \texttt{rst\_ni})	\\
+AXI GPIO 1 (LEDs Debug)        & \texttt{0x41210000}		& $64\text{ KB}$	& Inaccesible (Línea de diagnóstico)            \\
+HR-RT-Reporter (IP Core)       & \texttt{0x43C00000}		& $64\text{ KB}$	& \texttt{0x80000008}--\texttt{0x80000010} (bloque de captura de eventos, ver Tabla~\ref{tab:mapa_registros_reporter})         \\ \hline
 \end{tabular}
 \end{table}
 
@@ -184,25 +236,106 @@ El núcleo de la propuesta metodológica de este Proyecto Final Integrador recae
 \subsection{Generación de Timestamps por Hardware}
 \label{ssec:timestamps_hw}
 
-La medición de tiempos en sistemas operativos de propósito general (como Linux ejecutándose en el procesador ARM) está sujeta a latencias variables causadas por la planificación de procesos (\textit{scheduling}), manejo de interrupciones y políticas de caché. Para erradicar estas imprecisiones, el módulo \texttt{axi\_reporter} implementa un cronómetro de hardware dedicado basado en un contador ascendente continuo de **$64\text{ bits}$**.
+La medición de tiempos en sistemas operativos de propósito general (como Linux ejecutándose en el procesador ARM) está sujeta a latencias variables causadas por la planificación de procesos (\textit{scheduling}), manejo de interrupciones y políticas de caché. Para erradicar estas imprecisiones, el módulo \texttt{axi\_reporter} implementa un cronómetro de hardware dedicado basado en un contador ascendente continuo de $64\text{ bits}$.
 
-Este contador es alimentado directamente por la señal de reloj purificada de $50\text{ MHz}$ proveniente del bloque \textit{Clocking Wizard}, operando en estricto sincronismo con el núcleo Ibex. Como consecuencia, el registro temporal se incrementa de forma inexorable cada ciclo de reloj, proveyendo una base de tiempo monótona con una resolución discreta y absoluta de **$20\text{ ns}$**.
+Este contador es alimentado directamente por la señal de reloj purificada de $50\text{ MHz}$ proveniente del bloque \textit{Clocking Wizard}, operando en estricto sincronismo con el núcleo Ibex. Como consecuencia, el registro temporal se incrementa de forma inexorable cada ciclo de reloj, proveyendo una base de tiempo monótona con una resolución discreta y absoluta de $20\text{ ns}$.
 
 El contador de $64\text{ bits}$ se inicializa en cero durante el estado de reinicio general del sistema y, una vez liberado, es capaz de registrar un tiempo de ejecución continuo superior a $11,000$ años antes de sufrir un desbordamiento de entero (\textit{overflow}), lo que garantiza una cobertura temporal más que suficiente para cualquier ensayo de verificación en software de misión crítica.
 
 \subsection{Mecanismo de Intercepción No Intrusiva (Efecto Sonda Nulo)}
 \label{ssec:efecto_sonda_nulo}
 
-Las técnicas tradicionales de trazabilidad de software basadas en instrumentación de código o puntos de interrupción (\textit{breakpoints}) introducen retardos artificiales que alteran la temporalidad original del programa, un fenómeno conocido como **Efecto Sonda** (\textit{Probe Effect}). En sistemas de tiempo real estricto (\textit{Hard Real-Time}), esta sobrecarga invalida los resultados de la certificación.
+Las técnicas tradicionales de trazabilidad de software basadas en instrumentación de código o puntos de interrupción (\textit{breakpoints}) introducen retardos artificiales que alteran la temporalidad original del programa, un fenómeno conocido como Efecto Sonda (\textit{Probe Effect}). En sistemas de tiempo real estricto (\textit{Hard Real-Time}), esta sobrecarga invalida los resultados de la certificación.
 
 Para lograr una intrusión nula, el sistema HR-RT-Reporter implementa una lógica de monitoreo pasivo en silicio que opera como un analizador de bus (\textit{Hardware Sniffer}). La jerarquía de interconexión observa de manera continua y transparente el bus de datos del procesador RISC-V (\texttt{data\_*}). El protocolo de captura se rige por las siguientes etapas arquitectónicas:
 \begin{enumerate}
-    \item \textbf{Decodificación de Dirección de Frontera:} Dentro del firmware en C ejecutado por el Ibex, cada vez que el algoritmo alcanza un punto de control crítico o un evento de interés, el compilador emite una instrucción estándar de almacenamiento (\textit{Store Word}, \texttt{sw}) apuntando a la dirección de memoria virtual \texttt{0x80000000}.
-    \item \textbf{Captura Instantánea en Silicio:} Cuando la lógica de arbitraje del subsistema detecta una validación en el bus con la dirección de frontera (\texttt{data\_req = 1}, \texttt{data\_we = 1} y \texttt{data\_addr = 30'h80000000}), desvía la petición para no alterar el contenido de la BRAM local e impulsa una señal de disparo hacia el módulo Reporter.
+    \item \textbf{Decodificación de Dirección de Frontera:} Dentro del
+  firmware en \texttt{.coe} ejecutado por el Ibex, cada vez que el
+  algoritmo alcanza un punto de control crítico o un evento de interés, el
+  compilador emite una instrucción estándar de almacenamiento
+  (\textit{Store Word}, \texttt{sw}) apuntando a una de tres direcciones de
+  memoria virtual reservadas dentro del rango del periférico:
+  \texttt{0x80000008} para el contador de programa del evento
+  (\texttt{REG\_PC}), \texttt{0x8000000C} para su índice
+  (\texttt{REG\_I}) y \texttt{0x80000010} para el dato asociado
+  (\texttt{REG\_D}). El decodificador de direcciones del subsistema
+  (señal \texttt{sel\_ts} en \texttt{ibex\_bram\_subsystem.sv}) desvía
+  hacia el Reporter cualquier acceso dentro del rango completo
+  \texttt{0x8000\_0000}--\texttt{0x8FFF\_FFFF}; dentro de ese rango, es el
+  propio núcleo de captura del Reporter (\texttt{reporter\_core.sv}) quien
+  distingue el tipo de evento comparando la dirección exacta de cada
+  escritura entrante, en lugar de tratar la totalidad del rango como un
+  único registro pasivo indiferenciado.
+    \item \textbf{Captura Instantánea en Silicio:} Cuando la lógica de arbitraje del subsistema detecta una validación en el bus con la dirección de frontera reporter\_core.sv distingue el TIPO de evento por la
+    direccion real que usa el firmware, no por una unica direccion: escrituras a 0x80000008 capturan EVT\_PC, a 0x8000000C capturan EVT\_I (agregado en esta ultima sesion, ver 2.7), a 0x80000010 capturan EVT\_D. El filtrado de rango general (0x8000\_0000-0x8FFF\_FFFF) lo hace la señal sel\_ts en
+    ibex\_bram\_subsystem.sv, aguas arriba del Reporter.
     \item \textbf{Registro Asíncrono:} En el flanco de subida del reloj inmediato al disparo (un tiempo transitorio de exactamente 1 ciclo de reloj, $20\text{ ns}$), el \texttt{axi\_reporter} captura y almacena en su registro interno el valor exacto del contador de $64\text{ bits}$ en ese instante, junto con el dato o identificador de evento emitido por el procesador en el bus de escritura (\texttt{data\_wdata}).
 \end{enumerate}
 
-Debido a que el procesador RISC-V ejecuta la instrucción de almacenamiento como parte de su flujo natural de memoria de un ciclo sin experimentar ciclos de espera (\textit{wait states}) ni bloqueo de bus, **el overhead de instrumentación en el tiempo de ejecución del algoritmo es estrictamente constante y matemáticamente acotado a cero ciclos de penalización por arbitraje**, garantizando el cumplimiento de la propiedad de Efecto Sonda Nulo.
+Debido a que el procesador RISC-V ejecuta la instrucción de almacenamiento como parte de su flujo natural de memoria de un ciclo sin experimentar ciclos de espera (\textit{wait states}) ni bloqueo de bus, el overhead de instrumentación en el tiempo de ejecución del algoritmo es estrictamente constante y matemáticamente acotado a cero ciclos de penalización por arbitraje, garantizando el cumplimiento de la propiedad de Efecto Sonda Nulo.
+\subsubsection{Mapa de Registros del Reporter}
+El periférico \texttt{axi\_reporter\_v1.0} expone dos interfaces de
+acceso completamente independientes entre sí, correspondientes a los dos
+maestros que interactúan con él. Desde el lado del núcleo Ibex, el acceso
+es de \textbf{solo escritura} y no pasa por ningún decodificador de
+registros: el firmware emite instrucciones \texttt{sw} directamente hacia
+tres direcciones absolutas dentro del espacio de memoria del Ibex
+(\texttt{0x80000008} para el contador de programa del evento,
+\texttt{0x8000000C} para su índice, y \texttt{0x80000010} para el dato
+asociado), y es el propio núcleo de captura (\texttt{reporter\_core.sv})
+quien distingue el tipo de evento comparando la dirección exacta de cada
+escritura entrante. Desde el lado del bus AXI-Lite -- por el cual el
+Procesador de Sistema (PS) y, en consecuencia, el sistema operativo Linux
+embebido acceden al periférico -- el Reporter se comporta como un banco
+convencional de \textbf{ocho registros de solo lectura} de 32 bits,
+mapeados en la dirección base \texttt{0x43C00000} y direccionados por un
+desplazamiento (\textit{offset}) de 0x00 a 0x1C, tal como se detalla en la
+Tabla~\ref{tab:mapa_registros_reporter}.
+
+Cada registro cumple un rol específico dentro del esquema de
+trazabilidad. Los dos primeros (\texttt{TIMESTAMP\_LO}/\texttt{HI})
+forman un contador libre de 64 bits que corre de manera continua en el
+dominio de reloj de 100MHz del propio Reporter, independiente de la
+actividad del Ibex. Los siguientes tres (\texttt{EVT\_PC},
+\texttt{EVT\_I}, \texttt{EVT\_D}) son registros de tipo \textit{sticky}:
+retienen el último valor escrito por el Ibex hasta que ocurra una nueva
+escritura sobre esa misma dirección, de forma que Linux siempre puede leer
+el estado más reciente del evento sin necesidad de sincronizarse con el
+instante exacto en que el Ibex escribió. El registro \texttt{EVENT\_VALID}
+es, en cambio, un pulso de un único ciclo de reloj (a 100MHz) que se activa
+en el instante en que se completa la sincronización de una escritura
+proveniente del dominio de 50MHz del Ibex; dada su corta duración, es
+poco probable que un sondeo por software lo capture en el instante exacto,
+por lo que su utilidad es más de depuración puntual que de monitoreo
+continuo. Finalmente, \texttt{DBG\_RAW\_COUNT} y \texttt{DBG\_SYNC\_COUNT}
+son contadores de diagnóstico del propio mecanismo de sincronización entre
+dominios de reloj (ver Sección~\ref{sec:cdc}): el primero cuenta flancos
+de escritura detectados sin pasar por el sincronizador (una vía
+deliberadamente insegura, expuesta solo para comparación), mientras que el
+segundo cuenta los flancos ya sincronizados de forma segura; en operación
+normal ambos deben coincidir, y cualquier divergencia entre ellos indicaría
+pérdida de eventos por metaestabilidad en el cruce de dominios de reloj.
+
+\begin{table}[htbp]
+\centering
+\caption{Mapa de registros del periférico \texttt{axi\_reporter\_v1.0}, accesibles por AXI-Lite desde el lado del Procesador de Sistema (offset relativo a la dirección base \texttt{0x43C00000}).}
+\label{tab:mapa_registros_reporter}
+\begin{tabular}{clcl}
+\hline
+\textbf{Offset} & \textbf{Registro} & \textbf{Acceso} & \textbf{Descripción} \\ \hline
+\texttt{0x00} & \texttt{TIMESTAMP\_LO}   & Solo lectura & Bits [31:0] del contador libre de 64 bits (100MHz) \\
+\texttt{0x04} & \texttt{TIMESTAMP\_HI}   & Solo lectura & Bits [63:32] del contador libre de 64 bits \\
+\texttt{0x08} & \texttt{EVT\_PC}         & Solo lectura & Último contador de programa escrito por el Ibex (\textit{sticky}) \\
+\texttt{0x0C} & \texttt{EVENT\_VALID}    & Solo lectura & Pulso de 1 ciclo (100MHz) al completarse la sincronización de un evento \\
+\texttt{0x10} & \texttt{EVT\_D}          & Solo lectura & Último dato de evento escrito por el Ibex (\textit{sticky}) \\
+\texttt{0x14} & \texttt{EVT\_I}          & Solo lectura & Último índice de iteración escrito por el Ibex (\textit{sticky}) \\
+\texttt{0x18} & \texttt{DBG\_RAW\_COUNT} & Solo lectura & Cuenta de flancos de escritura \emph{sin} sincronizar (diagnóstico de CDC) \\
+\texttt{0x1C} & \texttt{DBG\_SYNC\_COUNT}& Solo lectura & Cuenta de flancos de escritura ya sincronizados (la cuenta confiable) \\ \hline
+\end{tabular}
+\end{table}
+
+Estos 8 \textit{offsets} se leen desde el lado AXI-Lite/Linux (base \texttt{0x43C00000}), y no son tres direcciones de  escritura que usa el firmware del lado del Ibex
+(\texttt{0x80000008}/\texttt{0x8000000C}/\texttt{0x80000010}.
 
 % =======================================================================
 % SECCIÓN 5: Interconexión y Mapeo del Sistema
@@ -231,7 +364,7 @@ La validez del ensayo temporal depende críticamente de la sincronización en el
 
 Para otorgar al sistema operativo un control absoluto sobre el inicio del experimento, la línea física de reinicio activo en bajo del SUT (\texttt{rst\_ni}) fue aislada y subordinada al registro de salida del bloque \textit{AXI GPIO 0}. Mediante esta topología, el procesador Ibex es retenido indefinidamente en estado de reinicio durante el encendido del SoC Zynq. 
 
-El inicio del cómputo crítico solo ocurre en el instante en que el ARM ejecuta una escritura explícita en el registro de control de su mapa de memoria (\texttt{0x41200000}), cambiando el nivel lógico del pin a alto (`1`). Este mecanismo actúa como un **"gatillo de arranque por hardware"** no transaccional, asegurando un punto de partida exacto, determinístico y reproducible para la medición del contador temporal.
+El inicio del cómputo crítico solo ocurre en el instante en que el ARM ejecuta una escritura explícita en el registro de control de su mapa de memoria (\texttt{0x41200000}), cambiando el nivel lógico del pin a alto (`1`). Este mecanismo actúa como un "gatillo de arranque por hardware" no transaccional, asegurando un punto de partida exacto, determinístico y reproducible para la medición del contador temporal.
 
 % =======================================================================
 % SECCIÓN 6: Implementación de Software y Despliegue
@@ -266,7 +399,7 @@ El despliegue de la arquitectura física se realizó compilando los productos de
 
 En el diseño de sistemas embebidos bajo Linux, la interacción con hardware personalizado puede resolverse mediante la programación de módulos y controladores de espacio de núcleo (\textit{Kernel-space drivers}). Sin embargo, el desarrollo de estos controladores introduce una alta complejidad arquitectónica y sobrecarga en el mantenimiento del sistema operativo.
 
-Dado que la plataforma HR-RT-Reporter delega toda la criticidad temporal y la captura de alta velocidad directamente a la Lógica Programable (PL), las tareas que debe ejecutar el procesador ARM son estructuralmente asíncronas y de baja frecuencia: iniciar el reset y extraer bloques de resultados finalizados. Por consiguiente, se optó por implementar toda la capa de control de software en el **Espacio de Usuario** (\textit{User-Space I/O}).
+Dado que la plataforma HR-RT-Reporter delega toda la criticidad temporal y la captura de alta velocidad directamente a la Lógica Programable (PL), las tareas que debe ejecutar el procesador ARM son estructuralmente asíncronas y de baja frecuencia: iniciar el reset y extraer bloques de resultados finalizados. Por consiguiente, se optó por implementar toda la capa de control de software en el Espacio de Usuario (\textit{User-Space I/O}).
 
 Esta técnica se implementó valiéndose de la función de llamada al sistema \texttt{mmap}, la cual proyecta un rango de direcciones físicas del bus AXI (expuesto a través de la partición virtual de memoria del kernel \texttt{/dev/mem}) directamente en el espacio de memoria virtual de un proceso de usuario. De esta forma, aplicaciones estándar de alto nivel pueden acceder a los registros físicos de la FPGA mediante punteros de puntero de lectura y escritura directos, logrando una velocidad de transferencia cercana a la nativa del hardware sin incurrir en cambios de contexto hacia el modo supervisor del kernel.
 

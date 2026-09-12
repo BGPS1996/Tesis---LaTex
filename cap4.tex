@@ -103,14 +103,14 @@ A continuación \textit{ibex\_bram\_subsystem.sv} este scripts contiene la insta
 `timescale 1ns / 1ps
 
 module ibex_bram_subsystem (
-    input  wire        clk_i,      // Sincronizado con el clock de la ARM
+    input  wire        clk_i,      // Reloj del Ibex (50 MHz, FCLK_CLK1)
     input  wire        rst_ni,     // Reset del Ibex controlado por el GPIO
 
     // --- INTERFAZ BRAM PROVENIENTE DEL AXI BRAM CONTROLLER (ARM) ---
     input  wire        bram_clk_a,   // Reloj del puerto A del controlador
     input  wire        bram_en_a,    // Enable del puerto A
     input  wire [3:0]  bram_we_a,    // Write Enable (byte-enables)
-    input  wire [12:0] bram_addr_a,  // Direccion fisica 
+    input  wire [12:0] bram_addr_a,  // Direccion fisica [12:0]
     input  wire [31:0] bram_wdata_a, // Datos a escribir desde el ARM
     output wire [31:0] bram_rdata_a, // Datos leidos hacia el ARM
 
@@ -135,93 +135,200 @@ module ibex_bram_subsystem (
     logic [31:0] data_rdata;
 
     logic [31:0] ram_rdata;
-    logic        sel_ts; 
+    logic        sel_ts;
 
-    // --- INSTANCIA DEL NUCLEO IBEX ---
-    ibex_top #(                      // Instanciacion de Ibex.
+    // ------------------------------------------------------------------
+    // FIX #1: sincronizador de reset para el dominio de 50MHz del Ibex.
+    // rst_ni llega desde el GPIO (dominio de 100MHz del AXI/PS). Al
+    // separar el reloj del Ibex a su propio dominio, la LIBERACION de
+    // este reset (transicion 0->1) es un cruce de dominio de reloj sin
+    // resolver si se usa tal cual: distintos flip-flops del core podrian
+    // salir de reset en instantes distintos entre si.
+    //
+    // La ASERCION sigue siendo inmediata (async assert); la LIBERACION
+    // queda sincronizada al reloj de 50MHz del propio Ibex mediante un
+    // sincronizador estandar de 2 flip-flops.
+    // ------------------------------------------------------------------
+    logic rst_sync_meta, rst_ni_sync;
+
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni) begin
+            rst_sync_meta <= 1'b0;
+            rst_ni_sync   <= 1'b0;
+        end else begin
+            rst_sync_meta <= 1'b1;
+            rst_ni_sync   <= rst_sync_meta;
+        end
+    end
+
+    // ------------------------------------------------------------------
+    // FIX #2: senales de protocolo request/grant/valid de ibex_top.
+    // La instanciacion original no conectaba instr_gnt_i, instr_rvalid_i,
+    // data_gnt_i, data_rvalid_i, instr_err_i, data_err_i -- quedaban
+    // flotantes, lo que podia impedir que el core completara
+    // correctamente sus fetches/accesos.
+    //
+    // Como bram_instrucciones_v2 tiene latencia sincrona fija de 1 ciclo
+    // (Puerto A: ena=1 constante, sin wait states), la conexion correcta
+    // es la mas simple posible: conceder cada request en el mismo ciclo
+    // (gnt = req), y marcar el dato como valido un ciclo despues
+    // (rvalid = req registrado). No hay condiciones de error en esta
+    // memoria local, asi que err_i queda fijo en 0.
+    // ------------------------------------------------------------------
+    // ------------------------------------------------------------------
+    // FIX #3: bram_instrucciones_v2 (blk_mem_gen v8.4) fue generada con
+    // C_HAS_MEM_OUTPUT_REGS_A=1 y C_HAS_MEM_OUTPUT_REGS_B=1 (registro de
+    // salida extra en ambos puertos), lo que da una latencia REAL de
+    // lectura de 2 ciclos (direccion -> dato valido), no 1. Con rvalid
+    // registrado a 1 solo ciclo, el primer fetch/load despues de CUALQUIER
+    // flush de pipeline (branch/jump tomado) capturaba el dato de la
+    // request ANTERIOR (todavia en vuelo), no el de la nueva direccion
+    // redirigida -- invisible durante fetch secuencial puro (el corrimiento
+    // se auto-absorbe), pero corrompe la primera instruccion tras un salto.
+    // Confirmado en simulacion: el word erroneo aceptado tras el salto
+    // final (jal x0,0 de "while(1)" en 0xB0) era el padding de ceros de
+    // 0xB4, decodificado como instruccion ilegal -> crash permanente.
+    // ------------------------------------------------------------------
+    logic instr_rvalid_q1, instr_rvalid_q;
+    logic data_rvalid_q1, data_rvalid_q;
+
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni) begin
+            instr_rvalid_q1 <= 1'b0;
+            instr_rvalid_q  <= 1'b0;
+            data_rvalid_q1  <= 1'b0;
+            data_rvalid_q   <= 1'b0;
+        end else begin
+            instr_rvalid_q1 <= instr_req;
+            instr_rvalid_q  <= instr_rvalid_q1;
+            data_rvalid_q1  <= data_req;
+            data_rvalid_q   <= data_rvalid_q1;
+        end
+    end
+
+    // --- 1. INSTANCIA DEL NUCLEO IBEX ---
+    ibex_top #(
         .PMPEnable ( 1'b0 ),
         .RV32E     ( 1'b0 ),
         .RV32M     ( ibex_pkg::RV32MFast )
     ) u_core_cpu (
         .clk_i          ( clk_i ),
-        .rst_ni         ( rst_ni ),
+        .rst_ni         ( rst_ni_sync ),      // reset SINCRONIZADO
+
         .test_en_i      ( 1'b0 ),
         .scan_rst_ni    ( 1'b1 ),
         .hart_id_i      ( 32'h0 ),
         .boot_addr_i    ( 32'h00000000 ),
 
+        // ICache deshabilitado (parametro por defecto ICache=1'b0): estas
+        // dos configs de RAM de icache no son usadas por el core, pero
+        // ibex_top no les da un valor por defecto -- si se dejan sin
+        // conectar quedan en X y disparan IbexRamCfgTagX/DataX durante
+        // toda la simulacion. Se atan a la config "nula" del paquete.
+        .ram_cfg_icache_tag_i      ( '0 ),
+        .ram_cfg_icache_data_i     ( '0 ),
+
         .instr_req_o    ( instr_req ),
+        .instr_gnt_i    ( instr_req ),        // gnt inmediato
+        .instr_rvalid_i ( instr_rvalid_q ),   // valido 1 ciclo despues
         .instr_addr_o   ( instr_addr ),
         .instr_rdata_i  ( instr_rdata ),
+        .instr_rdata_intg_i ( 7'b0 ),         // MemECC=0 (SecureIbex=0): no se usa
+        .instr_err_i    ( 1'b0 ),
 
         .data_req_o     ( data_req ),
+        .data_gnt_i     ( data_req ),         // gnt inmediato
+        .data_rvalid_i  ( data_rvalid_q ),    // valido 1 ciclo despues
         .data_addr_o    ( data_addr ),
         .data_we_o      ( data_we ),
         .data_wdata_o   ( data_wdata ),
         .data_rdata_i   ( data_rdata ),
+        .data_rdata_intg_i ( 7'b0 ),          // MemECC=0 (SecureIbex=0): no se usa
+        .data_err_i     ( 1'b0 ),
 
         .irq_software_i ( 1'b0 ),
         .irq_timer_i    ( 1'b0 ),
         .irq_external_i ( 1'b0 ),
+        .irq_fast_i     ( 15'b0 ),
         .irq_nm_i       ( 1'b0 ),
+
+        // Scrambling deshabilitado (ICacheScramble=1'b0 por defecto): sin
+        // consumidor interno, pero igualmente sin default -- mismo motivo
+        // que ram_cfg_icache_*.
+        .scramble_key_valid_i   ( 1'b0 ),
+        .scramble_key_i         ( '0 ),
+        .scramble_nonce_i       ( '0 ),
+
         .debug_req_i    ( 1'b0 ),
-        .fetch_enable_i ( 1'b1 )
+        .fetch_enable_i ( ibex_pkg::IbexMuBiOn )
     );
 
-    // --- DECODIFICADOR PARA EL REPORTER ---
+    // --- 2. DECODIFICADOR PARA EL REPORTER ---
     assign sel_ts = (data_addr[31:28] == 4'h8);
 
     assign reporter_req_o   = data_req & sel_ts;
-    assign reporter_addr_o  = data_addr;
     assign reporter_we_o    = data_we;
-    assign reporter_wdata_o = data_wdata;
 
     assign data_rdata = sel_ts ? reporter_rdata_i : ram_rdata;
 
-    // --- MULTIPLEXOR DEL PUERTO B DE LA BRAM ---
+    // ------------------------------------------------------------------
+    // FIX #6: reporter_addr_o/reporter_wdata_o pasan de combinacional a
+    // "sticky" (retienen el ultimo valor escrito, en vez de durar solo 1
+    // ciclo de clk_i @ 50MHz). Motivo: reporter_core.sv corre en el
+    // dominio S_AXI_ACLK @ 100MHz (FCLK_CLK0), mientras que este modulo
+    // corre en clk_i @ 50MHz (FCLK_CLK1) -- dos dominios de reloj
+    // asincronos confirmados en design_1.bd. reporter_req_o/we_o (el
+    // pulso de 1 ciclo que dispara el evento) SI se sincroniza
+    // correctamente del lado de reporter_core.sv con un sincronizador de
+    // 2-3 flip-flops antes de usarse; pero eso significa que para cuando
+    // el dominio AXI detecta el pulso ya sincronizado (2-3 ciclos de
+    // 100MHz despues), la direccion/dato originales YA CAMBIARON en el
+    // dominio de 50MHz si se leen combinacionalmente. Al retenerlos aca
+    // (sticky, solo se actualizan en una escritura real hacia el
+    // Reporter) quedan estables el tiempo suficiente para que el lado
+    // AXI los muestree con seguridad despues de sincronizar el pulso.
+    // ------------------------------------------------------------------
+    logic [31:0] reporter_addr_hold, reporter_wdata_hold;
+
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni) begin
+            reporter_addr_hold  <= 32'h0;
+            reporter_wdata_hold <= 32'h0;
+        end else if (data_req && data_we && sel_ts) begin
+            reporter_addr_hold  <= data_addr;
+            reporter_wdata_hold <= data_wdata;
+        end
+    end
+
+    assign reporter_addr_o  = reporter_addr_hold;
+    assign reporter_wdata_o = reporter_wdata_hold;
+
+    // --- 3. MULTIPLEXOR DEL PUERTO B DE LA BRAM (ARM vs IBEX DATA) ---
     logic        bram_portb_en;
     logic [3:0]  bram_portb_we;
     logic [31:0] bram_portb_addr;
     logic [31:0] bram_portb_wdata;
-    
-    // NUEVA SEnAL INTERMEDIA PARA ALINEAR LA ESCRITURA
-    logic [3:0]  bram_portb_we_internal; 
+    logic [3:0]  bram_portb_we_internal;
 
-    // REGLA DE ARBITRAJE:
-    // Si data_we es 1 y NO estamos escribiendo en el Reporter
-    // (!sel_ts), forzamos 4'b1111
-    assign bram_portb_we_internal = 
-    (!rst_ni) ? bram_we_a : ((data_we && !sel_ts) ? 4'b1111 : 4'b0000);
-
-    // El Enable depende de data_req cuando el Ibex corre, no esta clavado en 1
-    assign bram_portb_en    = (!rst_ni) ? bram_en_a    : data_req; 
-    
-    // Usamos la senal alineada
-    assign bram_portb_we    = bram_portb_we_internal; 
-    
+    assign bram_portb_we_internal = (!rst_ni) ? bram_we_a : ((data_we && !sel_ts) ? 4'b1111 : 4'b0000);
+    assign bram_portb_en    = (!rst_ni) ? bram_en_a    : data_req;
+    assign bram_portb_we    = bram_portb_we_internal;
     assign bram_portb_wdata = (!rst_ni) ? bram_wdata_a : data_wdata;
-    
-    // Mapeo de direcciones: Concatenamos 19 ceros + los 13 bits del ARM = 32 bits
     assign bram_portb_addr  = (!rst_ni) ? {19'b0, bram_addr_a} : data_addr;
-    
-    // Retorno de datos: El bus de lectura se comparte de forma segura
     assign bram_rdata_a     = ram_rdata;
 
-    // --- INSTANCIA DE LA BRAM FISICA ---
+    // --- 4. INSTANCIA DE LA BRAM Fï¿½SICA ---
     bram_instrucciones_v2 u_memoria_sistema (
-        // Puerto A: Dedicado exclusivamente a las instrucciones del Ibex
         .clka   ( clk_i ),
         .ena    ( 1'b1 ),
-        .wea    ( 4'b0 ),
-        .addra  ( instr_addr[13:2] ), 
+        .wea    ( 1'b0 ),
+        .addra  ( instr_addr[13:2] ),
         .dina   ( 32'h0 ),
         .douta  ( instr_rdata ),
-    
-        // Puerto B: Multiplexado dinamicamente 
-        // (ARM cuando esta en reset, Ibex Data cuando corre)
+
         .clkb   ( clk_i ),
         .enb    ( bram_portb_en ),
-        .web    ( bram_portb_we ),
+        .web    ( |bram_portb_we ),
         .addrb  ( bram_portb_addr[13:2] ),
         .dinb   ( bram_portb_wdata ),
         .doutb  ( ram_rdata )
@@ -237,12 +344,24 @@ A continuación, se detalla el código del subsistema \texttt{ibex\_bram\_wrappe
 
 \begin{lstlisting}[style=verilogstyle, basicstyle=\ttfamily\footnotesize, caption={Código fuente del subsistema \texttt{ibex\_bram\_wrapper\_bd.v}}, label={code:ibex_bram_wrapper.v}]
 `timescale 1ns / 1ps
+//////////////////////////////////////////////////////////////////////////////////
+// Company: 
+// Engineer: 
+// 
+// Create Date: 01.06.2026 18:16:54
+// Design Name: 
+// Module Name: ibex_bram_wrapper_bd
+// Project Name: 
+// Target Devices: 
+// Tool Versions: 
+// Description: Wrapper perforado para permitir el acceso del ARM a la BRAM
+//////////////////////////////////////////////////////////////////////////////////
 
 module ibex_bram_wrapper_bd (
     input wire clk_i,
     input wire rst_ni,
 
-    // --- PINES DE LA BRAM (TuNEL HACIA EL ARM) ---
+    // --- PINES DE LA BRAM (TÚNEL HACIA EL ARM) ---
     input  wire        bram_clk_a,
     input  wire        bram_en_a,
     input  wire [3:0]  bram_we_a,
@@ -263,7 +382,7 @@ module ibex_bram_wrapper_bd (
         .clk_i(clk_i),
         .rst_ni(rst_ni),
 
-        // --- CONECTAMOS EL TuNEL HACIA ADENTRO ---
+        // --- CONECTAMOS EL TÚNEL HACIA ADENTRO ---
         .bram_clk_a(bram_clk_a),
         .bram_en_a(bram_en_a),
         .bram_we_a(bram_we_a),
@@ -283,9 +402,50 @@ endmodule
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.7\linewidth]{ibex_bram_wrapper.png}
-    \caption{Diagrama de bloque de ibex\_bram\_wrapper.v}
-    \label{fig:Bloque representativo}
+    \includegraphics[width=0.9\linewidth]{figs/ibex_bram_fig/design_2_ibex_bram_subsystem00.pdf}
+    \caption{Interfaz externa del bloque \texttt{ibex\_bram\_wrapper\_bd\_0\_0}: puertos de conexión hacia la BRAM de instrucciones y hacia el periférico Reporter.}
+    \label{fig:wrapper_l0}
+\end{figure}
+
+La Figura~\ref{fig:wrapper_l0} muestra el wrapper como una única unidad,
+exponiendo hacia afuera el bus de la BRAM (\texttt{bram\_*}) y las cuatro
+señales del canal de comunicación hacia el Reporter
+(\texttt{reporter\_req\_o}, \texttt{reporter\_we\_o},
+\texttt{reporter\_addr\_o}, \texttt{reporter\_wdata\_o}) descriptas en la
+Sección~\ref{sec:cdc}. Al expandir un nivel de jerarquía (Figura
+\ref{fig:wrapper_l1}) se observa que el wrapper es, en esta versión final
+del diseño, un contenedor directo de una única instancia interna
+(\texttt{inst\_ibex}, correspondiente al módulo
+\texttt{ibex\_bram\_subsystem}), que expone además hacia el exterior el
+bus de depuración \texttt{alu\_adder\_result\_ex\_o} utilizado durante el
+desarrollo para observar internamente el resultado de la ALU del núcleo.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\linewidth]{figs/ibex_bram_fig/design_2_ibex_bram_subsystem11.pdf}
+    \caption{Un nivel de jerarquía expandido: el wrapper contiene la instancia \texttt{inst\_ibex} del subsistema \texttt{ibex\_bram\_subsystem}.}
+    \label{fig:wrapper_l1}
+\end{figure}
+
+Finalmente, la Figura~\ref{fig:wrapper_l2} expone la implementación
+interna completa de \texttt{inst\_ibex}, ya sintetizada: el núcleo
+\texttt{u\_core\_cpu} (\texttt{ibex\_top}), la memoria de instrucciones
+\texttt{u\_memoria\_sistema} (\texttt{bram\_instrucciones\_v2}), y las
+celdas de tipo \textit{flip-flop} (\texttt{FDCE}) que materializan tanto
+la cadena de sincronización de reset de dos etapas
+(\texttt{rst\_sync\_meta\_reg} $\rightarrow$ \texttt{rst\_ni\_sync\_reg})
+como la cadena de dos \textit{flip-flops} que modela la latencia real de
+lectura de la memoria de instrucciones
+(\texttt{instr\_rvalid\_q\_reg}/\texttt{data\_rvalid\_q\_reg}), corrección
+descripta en la Sección~\ref{sec:latencia_bram}. Esta captura constituye
+evidencia directa de que dicha corrección quedó efectivamente sintetizada
+en el diseño final, y no solo presente en el código fuente.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{figs/ibex_bram_fig/design_2_ibex_bram_subsystem22.pdf}
+    \caption{Implementación interna completa de \texttt{inst\_ibex}, mostrando el núcleo Ibex, la memoria de instrucciones y las celdas \texttt{FDCE} de la cadena de sincronización de reset y de la corrección de latencia de lectura.}
+    \label{fig:wrapper_l2}
 \end{figure}
 
 
@@ -357,6 +517,166 @@ La interfaz de personalización de Vivado permite la configuración granular de 
 Desde la perspectiva del diseño, el bloque \texttt{axi\_reporter\_0} expone una interfaz de señales que incluye las líneas de control (\textit{req}, \textit{we}, \textit{addr}) y los buses de datos de escritura y lectura. Estas señales son interconectadas directamente con el decodificador implementado en el \textit{wrapper} (\texttt{ibex\_bram\_subsystem.sv}), permitiendo que el núcleo RISC-V acceda al periférico cuando la dirección de acceso se encuentra dentro del rango lógico definido por la señal \texttt{sel\_ts}.
 
 Esta modularidad permite que, ante la necesidad de futuras actualizaciones o escalabilidad del sistema de reporte, se puedan modificar los registros internos del \textit{Reporter} sin alterar la jerarquía superior del procesador o la estructura de la memoria BRAM.
+A continuación el codigo e instanciación del periferico (reporter\_core.sv)
+
+\begin{lstlisting}[style=verilogstyle, basicstyle=\ttfamily\footnotesize, caption={Código fuente del subsistema \texttt{reporter\_core.sv}}, label={code:reporter_core.sv}]
+`timescale 1ns / 1ps
+
+module reporter_core (
+    input  logic        clk_i,      // S_AXI_ACLK (100 MHz, FCLK_CLK0)
+    input  logic        rst_ni,     // S_AXI_ARESETN
+
+    // --- INTERFAZ DESDE EL IBEX (El "escucha") ---
+    // ibex_req_i/ibex_we_i son un pulso de 1 ciclo generado en el dominio
+    // de clk_i del Ibex (50 MHz, FCLK_CLK1) -- un dominio de reloj
+    // DISTINTO y asincrono respecto de este modulo (100 MHz). Se tratan
+    // como entradas asincronas y se sincronizan explicitamente abajo.
+    // ibex_addr_i/ibex_wdata_i llegan como seÃ±ales "sticky" (retenidas
+    // por ibex_bram_subsystem.sv hasta la proxima escritura real), por
+    // lo que es seguro muestrearlas varios ciclos de clk_i despues de
+    // que el pulso ocurrio, una vez sincronizado.
+    input  logic        ibex_req_i,
+    input  logic [31:0] ibex_addr_i,
+    input  logic        ibex_we_i,
+    input  logic [31:0] ibex_wdata_i,
+    output logic [31:0] ibex_rdata_o,
+
+    // --- INTERFAZ HACIA EL ZYNQ (El "emisor") ---
+    // Estos cables luego se conectan al bus AXI para que Linux los lea
+    output logic [63:0] current_timestamp_o,
+    output logic [31:0] last_event_data_o,
+    output logic        event_valid_o,
+
+    // --- REGISTROS NUEVOS DE DIAGNOSTICO / EVENTO ---
+    output logic [31:0] evt_pc_o,          // ultimo dato escrito a REG_PC (0x80000008), sticky
+    output logic [31:0] evt_i_o,           // ultimo dato escrito a REG_I  (0x8000000C), sticky
+    output logic [31:0] evt_d_o,           // ultimo dato escrito a REG_D  (0x80000010), sticky
+    output logic [31:0] dbg_raw_count_o,   // cuenta flancos del pulso SIN sincronizar (diagnostico CDC)
+    output logic [31:0] dbg_sync_count_o   // cuenta flancos del pulso YA sincronizado (el numero confiable)
+);
+
+    // 1. CONTADOR ABSOLUTO DE HARDWARE (Resolucion de 10ns a 100MHz)
+    logic [63:0] hw_timestamp;
+
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni) begin
+            hw_timestamp <= 64'h0;
+        end else begin
+            hw_timestamp <= hw_timestamp + 1'b1;
+        end
+    end
+
+    // Exponemos el tiempo actual hacia el exterior de forma continua
+    assign current_timestamp_o = hw_timestamp;
+
+    // ------------------------------------------------------------------
+    // 2. CRUCE DE DOMINIO DE RELOJ (CDC) del pulso ibex_req_i && ibex_we_i
+    //
+    // "RAW": la señal cruzando el dominio sin ningun tipo de
+    // sincronizacion, muestreada directamente por un unico flip-flop de
+    // este dominio. Tiene riesgo real de metaestabilidad y de perder
+    // flancos si coincide mal con el borde de reloj. Se cuenta aca
+    // deliberadamente asi, "insegura", solo para poder comparar contra
+    // la version sincronizada y detectar si el CDC esta perdiendo
+    // eventos.
+    //
+    // "SYNC": la misma seÃ±al pasada por una cadena de sincronizadores de
+    // 3 flip-flops (2 para resolver metaestabilidad + 1 para detectar
+    // flanco de forma limpia) antes de contarla. Esta es la cuenta
+    // confiable.
+    // ------------------------------------------------------------------
+    logic ibex_we_raw;
+    assign ibex_we_raw = ibex_req_i && ibex_we_i;
+
+    // --- Camino RAW (sin sincronizar, solo diagnostico) ---
+    logic raw_ff_q;
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni) begin
+            raw_ff_q        <= 1'b0;
+            dbg_raw_count_o <= 32'h0;
+        end else begin
+            raw_ff_q <= ibex_we_raw;
+            if (ibex_we_raw && !raw_ff_q) begin
+                dbg_raw_count_o <= dbg_raw_count_o + 1'b1;
+            end
+        end
+    end
+
+    // --- Camino SYNC (sincronizador de 3 flip-flops + deteccion de flanco) ---
+    logic sync_ff1, sync_ff2, sync_ff3;
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni) begin
+            sync_ff1 <= 1'b0;
+            sync_ff2 <= 1'b0;
+            sync_ff3 <= 1'b0;
+        end else begin
+            sync_ff1 <= ibex_we_raw;   // etapa 1: puede quedar metaestable, se descarta
+            sync_ff2 <= sync_ff1;      // etapa 2: ya resuelta, valor confiable
+            sync_ff3 <= sync_ff2;      // etapa 3: un ciclo atras, para detectar flanco
+        end
+    end
+
+    logic we_synced_pulse;
+    assign we_synced_pulse = sync_ff2 && !sync_ff3;
+
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni) begin
+            dbg_sync_count_o <= 32'h0;
+        end else if (we_synced_pulse) begin
+            dbg_sync_count_o <= dbg_sync_count_o + 1'b1;
+        end
+    end
+
+    // 3. CAPTURA DE EVENTOS (usando el pulso YA sincronizado)
+    // ibex_addr_i/ibex_wdata_i son sticky del lado del Ibex (ver
+    // ibex_bram_subsystem.sv FIX #6), asi que siguen reflejando la
+    // escritura correcta en el momento en que we_synced_pulse se activa,
+    // 2-3 ciclos de clk_i despues del evento real.
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni) begin
+            last_event_data_o <= 32'h0;
+            event_valid_o     <= 1'b0;
+            evt_pc_o          <= 32'h0;
+            evt_i_o           <= 32'h0;
+            evt_d_o           <= 32'h0;
+        end else begin
+            event_valid_o <= 1'b0;
+            if (we_synced_pulse) begin
+                last_event_data_o <= ibex_wdata_i;
+                event_valid_o     <= 1'b1;
+                if (ibex_addr_i == 32'h80000008) begin
+                    evt_pc_o <= ibex_wdata_i;
+                end else if (ibex_addr_i == 32'h8000000C) begin
+                    evt_i_o <= ibex_wdata_i;
+                end else if (ibex_addr_i == 32'h80000010) begin
+                    evt_d_o <= ibex_wdata_i;
+                end
+            end
+        end
+    end
+
+    // 4. RESPUESTA AL IBEX (Si el Ibex quiere leer el cronometro)
+    // Nota: esta lectura SI tiene el mismo problema de CDC sin resolver
+    // (ibex_rdata_o vuelve combinacionalmente hacia el dominio de 50MHz
+    // del Ibex sin sincronizador). No se toco porque sanity_check.c no
+    // hace lecturas desde el Reporter -- ver "CAVEAT" en el reporte de
+    // esta sesion si se planea agregar firmware que lea de aca.
+    always_comb begin
+        ibex_rdata_o = 32'h0;
+        if (ibex_req_i && !ibex_we_i) begin
+            if (ibex_addr_i == 32'h80000000)
+                ibex_rdata_o = hw_timestamp[31:0]; // Retorna los 32 bits bajos
+            else if (ibex_addr_i == 32'h80000004)
+                ibex_rdata_o = hw_timestamp[63:32]; // Retorna los 32 bits altos
+        end
+    end
+
+endmodule
+\end{lstlisting}
+
+
+
+
 \section{Implementación del Diagrama de Bloques (\textit{Block Design})}
 Una vez configurados los módulos HDL personalizados y empaquetados los núcleos IP, el paso final del flujo de diseño consistió en la integración del sistema dentro del entorno gráfico de \textit{Block Design} de Vivado. Esta etapa permite la interconexión visual de los componentes, la gestión de las señales de reloj y reset, y el mapeo de interfaces con la arquitectura del sistema en chip (SoC).
 
