@@ -1,1 +1,595 @@
-\chapter{Ensayos}
+\chapter{Verificación y Depuración del Sistema}
+\label{ch:resultados}
+
+\section{Objetivos de las Pruebas}
+\label{sec:objetivos_pruebas}
+
+El objetivo general del proceso de verificación fue confirmar que la
+arquitectura HR-RT-Reporter, en su estado final, cumple de punta a punta
+con la propuesta metodológica de este trabajo: capturar eventos de
+ejecución del núcleo Ibex con efecto sonda nulo, fecharlos con una base de
+tiempo de hardware, y ponerlos a disposición del sistema operativo Linux
+de forma confiable, sin pérdida de eventos por metaestabilidad entre
+dominios de reloj. De este objetivo general se desprenden los siguientes
+objetivos específicos, cada uno abordado en una sección independiente de
+este capítulo:
+
+\begin{itemize}
+    \item Verificar que el canal de comunicación entre el Procesador de
+    Sistema (PS) y la Lógica Programable (PL) -- disparo de arranque por
+    GPIO, acceso a la BRAM, exclusión mutua -- funciona como fue diseñado
+    (Sección~\ref{sec:pruebas_ps_pl}).
+    \item Verificar que el núcleo Ibex ejecuta el firmware correctamente
+    desde la memoria de instrucciones local, sin quedar en estados
+    indeterminados ni ejecutar instrucciones incorrectas tras un salto
+    (Sección~\ref{sec:pruebas_ibex}).
+    \item Verificar que el módulo Reporter captura los eventos de
+    escritura del Ibex en las direcciones correctas
+    (Sección~\ref{sec:pruebas_eventos}).
+    \item Verificar que la base de tiempo de hardware (\textit{timestamp})
+    es monótona, independiente y correctamente accesible
+    (Sección~\ref{sec:verificacion_timestamps}).
+    \item Verificar que el cruce entre los dos dominios de reloj
+    asíncronos del sistema (Ibex a $50\text{ MHz}$, Reporter a
+    $100\text{ MHz}$) no introduce pérdida de eventos
+    (Sección~\ref{sec:verificacion_cdc}).
+    \item Verificar que el sistema operativo Linux puede leer de forma
+    confiable, vía AXI-Lite, los resultados capturados por el hardware
+    (Sección~\ref{sec:pruebas_linux}).
+\end{itemize}
+
+Un objetivo transversal a todas las pruebas anteriores fue, siempre que
+resultara posible, validarlas primero mediante simulación funcional
+(\texttt{xsim}) antes de comprometer un ciclo completo de síntesis,
+implementación y generación de \textit{bitstream} -- del orden de $15$ a
+$20$ minutos por corrida -- para probarlas sobre la placa física.
+
+%--------------------------------------------------------------------------------
+%5.2) METODOLOGIA DE VERIFICACION
+%--------------------------------------------------------------------------------
+
+\section{Metodología de Verificación}
+\label{sec:metodologia_debug}
+
+\subsection{Preparación del Entorno de Simulación}
+\label{ssec:entorno_xsim}
+
+Antes de poder ejecutar cualquier simulación de línea de comandos con las
+herramientas de Vivado (\texttt{xvlog}, \texttt{xelab}, \texttt{xsim}), es
+necesario preparar el entorno de la siguiente manera:
+
+\begin{enumerate}
+    \item \textbf{Habilitar las herramientas en el \texttt{PATH}:} abrir
+    una consola (símbolo del sistema o PowerShell) y ejecutar el script de
+    configuración de la instalación de Vivado:
+    
+\begin{lstlisting}[style=powershellstyle]
+call E:\vv\Vivado\2022.2\settings64.bat
+\end{lstlisting}
+
+    Este script agrega al \texttt{PATH} de la sesión actual el directorio
+    \texttt{bin} de Vivado (donde residen \texttt{xvlog.exe},
+    \texttt{xelab.exe} y \texttt{xsim.exe}) y define las variables de
+    entorno necesarias (\texttt{XILINX\_VIVADO}, licencias, etc.). Es el
+    mismo entorno que usa Vivado internamente para su función
+    \textit{"Run Simulation"} desde la interfaz gráfica, por lo que los
+    resultados obtenidos por línea de comandos son equivalentes a los que
+    se obtendrían desde la GUI.
+    \item \textbf{Ubicarse en el directorio del proyecto:} los comandos de
+    simulación se ejecutan desde el directorio raíz del proyecto
+    (\texttt{C:\textbackslash pro\textbackslash reporter5}), de forma que
+    las rutas relativas a los archivos fuente del \textit{fileset} de
+    simulación (\texttt{reporter5.srcs/sim\_1/new/}) sean consistentes.
+    \item \textbf{Verificar que el entorno quedó configurado:} ejecutar
+    \texttt{xvlog -version} y confirmar que reporta la versión de Vivado
+    instalada (\texttt{2022.2} en este proyecto). Si el comando no se
+    reconoce, el paso 1 no se ejecutó correctamente en esa misma consola.
+\end{enumerate}
+
+%--------------------------------------------------------------------------------
+%5.2) AGREGAR EL TESTBENCH AL PROYECTO Y CONFIGURARLO COMO TOP
+%--------------------------------------------------------------------------------
+
+\subsection{Incorporación del \textit{Testbench} y Configuración como Módulo Superior}
+\label{ssec:tb_como_top}
+
+Con el entorno preparado, el siguiente paso es incorporar el archivo de
+banco de pruebas (\textit{testbench}) al conjunto de fuentes de
+simulación del proyecto de Vivado (\texttt{reporter5.xpr}):
+
+\begin{enumerate}
+    \item \textbf{Agregar el archivo al \textit{fileset} de simulación:}
+    en la ventana \textit{Sources} de Vivado, clic derecho sobre
+    \textit{Simulation Sources (sim\_1)} $\rightarrow$ \textit{Add
+    Sources...} $\rightarrow$ \textit{Add or create simulation sources},
+    incorporando el archivo \texttt{tb\_ibex\_bram\_subsystem.sv}
+    (ubicado en \texttt{reporter5.srcs/sim\_1/new/}). El mismo resultado
+    se obtiene por línea de comandos Tcl con:
+    
+\begin{lstlisting}[style=bashstyle]
+add_files -fileset sim_1 reporter5.srcs/sim_1/new/tb_ibex_bram_subsystem.sv
+\end{lstlisting}
+
+    \item \textbf{Configurar el \textit{testbench} como módulo superior
+    (\textit{Set as Top}):} un \textit{fileset} de simulación puede
+    contener más de un banco de pruebas (en este proyecto conviven, por
+    ejemplo, distintas variantes de instrumentación del mismo archivo a lo
+    largo de las sesiones de depuración), por lo que es necesario indicarle
+    a Vivado cuál debe instanciarse como raíz de la jerarquía de
+    simulación. En la GUI: clic derecho sobre el módulo
+    \texttt{tb\_ibex\_bram\_subsystem} en el árbol de fuentes
+    $\rightarrow$ \textit{Set as Top}. Por línea de comandos, la propiedad
+    equivalente es:
+
+\begin{lstlisting}[style=bashstyle]
+set_property top tb_ibex_bram_subsystem [get_filesets sim_1]
+set_property top_lib xil_defaultlib [get_filesets sim_1]
+\end{lstlisting}
+
+    \item \textbf{Dependencias resueltas automáticamente:} a partir de este
+    punto, Vivado (o \texttt{xvlog}/\texttt{xelab} invocados manualmente,
+    ver Sección~\ref{ssec:ejecucion_xsim}) resuelve el orden de análisis de
+    todos los archivos fuente de los que depende el \textit{testbench}: los
+    paquetes y módulos del núcleo Ibex (importados vía FuseSoC, ver
+    Sección~\ref{ssec:fuse}), el subsistema propio
+    \texttt{ibex\_bram\_subsystem.sv} y, en la variante extendida del
+    \textit{testbench} usada para validar el mecanismo de cruce de
+    dominios de reloj, el IP completo del Reporter
+    (\texttt{axi\_reporter\_v1\_0}, con sus tres archivos fuente:
+    \texttt{reporter\_core.sv}, \texttt{axi\_reporter\_v1\_0\_S00\_AXI.v}
+    y \texttt{axi\_reporter\_v1\_0.v}).
+\end{enumerate}
+El código fuente completo de esta variante extendida del \textit{testbench} -- incluyendo la instrumentación de traza, el \textit{driver} AXI-Lite y las verificaciones automáticas contra los
+    valores esperados -- se incluye íntegro en el Apéndice~\ref{ap:script-tb}.
+%--------------------------------------------------------------------------------
+%5.3) EJECUCION DE LA SIMULACION (xsim)
+%--------------------------------------------------------------------------------
+
+\subsection{Ejecución de la Simulación}
+\label{ssec:ejecucion_xsim}
+
+Con el \textit{testbench} configurado como módulo superior, existen dos
+vías equivalentes para ejecutarlo, ambas invocando internamente las mismas
+tres herramientas:
+
+\begin{itemize}
+    \item \textbf{Desde la interfaz gráfica de Vivado:} pulsando
+    \textit{Run Simulation} $\rightarrow$ \textit{Run Behavioral
+    Simulation}, Vivado compila, elabora y lanza automáticamente el visor
+    de formas de onda (\textit{waveform viewer}), útil para una inspección
+    visual rápida.
+    \item \textbf{Desde la línea de comandos:} la vía utilizada
+    preferentemente durante el ciclo intensivo de depuración de este
+    trabajo, ya que permite iterar con mayor velocidad (sin la sobrecarga
+    de reabrir la interfaz gráfica en cada corrida) y automatizar la
+    búsqueda de patrones de error en los registros de salida
+    (\textit{logs}) mediante herramientas de línea de comandos. El flujo
+    consta de tres invocaciones sucesivas:
+    \begin{enumerate}
+        \item \texttt{xvlog} compila cada archivo fuente en el orden de
+        dependencias correcto, hacia una biblioteca de simulación
+        (\texttt{xil\_defaultlib} por defecto).
+        \item \texttt{xelab} elabora la jerarquía completa del diseño a
+        partir del módulo superior configurado, y genera un
+        \textit{snapshot} ejecutable de la simulación, por ejemplo:
+\begin{verbatim}
+xelab --incr --debug typical --relax --mt 2 -L xil_defaultlib
+  -L blk_mem_gen_v8_4_5 -L uvm -L xilinx_vip -L unisims_ver
+  -L unimacro_ver -L secureip -L xpm --snapshot tb_reporter_cdc_behav
+  xil_defaultlib.tb_ibex_bram_subsystem xil_defaultlib.glbl -log xelab.log
+\end{verbatim}
+        (se incluye siempre \texttt{xil\_defaultlib.glbl}, el módulo
+        global de señales de Xilinx requerido por las primitivas
+        \textit{unisim} como \texttt{BUFGCE} y por \texttt{blk\_mem\_gen}).
+        \item \texttt{xsim} ejecuta ese \textit{snapshot} de principio a
+        fin y vuelca la salida de las sentencias \texttt{\$display} del
+        \textit{testbench} a un archivo de registro para su análisis
+        posterior:
+\begin{verbatim}
+xsim tb_reporter_cdc_behav -log xsim_run.log -runall
+\end{verbatim}
+    \end{enumerate}
+\end{itemize}
+
+%--------------------------------------------------------------------------------
+%5.4) METODOLOGIA DE DIAGNOSTICO: COMO SE LLEGO A DESCIFRAR CADA ANOMALIA
+%--------------------------------------------------------------------------------
+
+\subsection{Metodología de Diagnóstico: Cómo se Identificó Cada Anomalía}
+\label{ssec:metodologia_diagnostico}
+
+Una vez operativo el flujo de simulación, la identificación de cada
+defecto siguió un proceso sistemático de refinamiento progresivo, en el
+que cada corrida exitosa habilitaba la detección del problema siguiente,
+inicialmente enmascarado por el anterior:
+
+\begin{enumerate}
+    \item \textbf{Primer filtro -- errores de compilación/elaboración:} la
+    primera corrida de \texttt{xelab} fallaba con un error de compilación
+    del código C++ generado internamente por la herramienta a partir de
+    una exportación \texttt{DPI-C} dentro de un bloque \texttt{generate}
+    con nombre del RTL de Ibex. Esto impedía incluso obtener un
+    \textit{snapshot} ejecutable, y se resolvió aislando esa exportación
+    bajo una directiva de compilación condicional (\texttt{`ifdef
+    VERILATOR}) que nunca está activa en el flujo de Vivado.
+
+    \item \textbf{Segundo filtro -- aserciones internas del núcleo:} con la
+    simulación ya elaborando correctamente, el registro de salida mostraba
+    decenas de fallos de aserción por segundo de simulación
+    (\texttt{ASSERT FAILED}) desde el segundo ciclo en adelante, causados
+    por puertos de \texttt{ibex\_top} sin conectar que permanecían en
+    estado indeterminado (\texttt{'X'}). Se identificaron mediante una
+    búsqueda de la cadena \texttt{"ASSERT FAILED"} en el registro,
+    cruzada contra la lista de puertos de entrada del núcleo sin valor por
+    defecto.
+
+    \item \textbf{Tercer filtro -- instrumentación de traza ciclo a
+    ciclo:} superadas las dos anomalías anteriores, la simulación se
+    comportaba correctamente durante el arranque, pero el núcleo caía en
+    un bucle de excepción permanente inmediatamente después del primer
+    salto tomado del programa. Para diagnosticar la causa raíz, se
+    instrumentó el \textit{testbench} con sentencias \texttt{\$display}
+    disparadas en cada flanco de reloj, volcando el estado de las señales
+    de \textit{fetch} de instrucciones y de acceso a datos (dirección,
+    dato, señal de válido) durante los primeros $300$ ciclos posteriores a
+    la liberación del reset. Esta traza se contrastó manualmente, ciclo
+    por ciclo, contra el contenido real del archivo de inicialización
+    (\texttt{.mif}/\texttt{.coe}) de la memoria de instrucciones --
+    decodificado a mano, con el desplazamiento de dirección correcto --
+    lo que permitió observar que el dato capturado inmediatamente después
+    de cada salto correspondía a la dirección \textit{anterior}, todavía
+    en tránsito dentro de la memoria, revelando un ciclo de latencia
+    faltante en el modelo de la señal de válido de lectura frente a la
+    latencia real de dos ciclos de la primitiva de memoria instanciada
+    (ver Sección~\ref{ssec:bram_dual_port}).
+
+    \item \textbf{Cuarto filtro -- verificación positiva de extremo a
+    extremo:} agotados los defectos detectables por fallos evidentes en el
+    registro de simulación, el \textit{testbench} se extendió para
+    instanciar además el periférico Reporter completo, con su propio
+    generador de reloj independiente de $100\text{ MHz}$ (asíncrono
+    respecto del reloj de $50\text{ MHz}$ del Ibex), junto con un
+    \textit{driver} AXI4-Lite de lectura escrito a mano. Esto permitió,
+    por primera vez, contrastar explícitamente los valores leídos por
+    simulación contra los valores esperados de forma analítica (por
+    ejemplo, el resultado final de la secuencia pseudoaleatoria generada
+    por el firmware), confirmando -- o, en un caso, refutando -- que cada
+    corrección aplicada al mecanismo de captura y sincronización se
+    comportaba como se esperaba, antes de invertir un ciclo completo de
+    síntesis e implementación para probarla en la placa física.
+\end{enumerate}
+
+Este proceso de refinamiento progresivo -- en el que cada capa de defectos
+ocultaba a la siguiente -- ilustra por qué la verificación por simulación
+resultó indispensable en este trabajo: varios de estos problemas, en
+particular el de latencia de memoria del tercer filtro, habrían sido
+extremadamente difíciles de diagnosticar directamente sobre hardware
+físico, donde no existe visibilidad ciclo a ciclo de las señales internas
+sin instrumentación adicional (por ejemplo, un analizador lógico integrado
+o \textit{ILA}).
+
+%--------------------------------------------------------------------------------
+%5.3) PRUEBAS DE COMUNICACION PS-PL
+%--------------------------------------------------------------------------------
+
+\section{Pruebas de Comunicación PS--PL}
+\label{sec:pruebas_ps_pl}
+
+Antes de ejercitar el núcleo Ibex o el módulo Reporter en sí, se verificó
+que los tres canales de comunicación entre el Procesador de Sistema y la
+Lógica Programable funcionan correctamente:
+
+\begin{itemize}
+    \item \textbf{Disparo de arranque por GPIO:} el script
+    \texttt{recolector.py} (Sección~\ref{sec:pruebas_linux}) controla la
+    línea de reinicio del Ibex a través de \texttt{axi\_gpio\_0}
+    (\texttt{0x41200000}), escribiendo primero un $0$ para mantener el
+    núcleo en reposo y luego un $1$ para liberarlo. Se verificó, tanto en
+    simulación (manteniendo \texttt{rst\_ni} en bajo) como en hardware
+    real, que sin esta liberación explícita del reset el núcleo Ibex
+    permanece detenido y ningún evento llega a capturarse.
+    \item \textbf{Acceso a la memoria BRAM vía
+    \texttt{axi\_bram\_ctrl\_0}:} se verificó que, con el Ibex retenido en
+    reset, el ARM puede inicializar y leer la memoria local a través de la
+    ventana de $8\text{ KB}$ expuesta en \texttt{0x40000000} (ver
+    Sección~\ref{sssec:memory_map} para la distinción entre esta ventana y
+    la profundidad real de $16\text{ KiB}$ de la BRAM).
+    \item \textbf{Exclusión mutua:} se verificó que, una vez liberado el
+    reset, el multiplexor de exclusión mutua
+    (Sección~\ref{ssec:exclusion_mutua}) revoca los privilegios de
+    escritura del ARM sobre la BRAM, protegiendo la integridad del
+    firmware en ejecución frente a accesos concurrentes desde Linux.
+\end{itemize}
+
+%--------------------------------------------------------------------------------
+%5.4) PRUEBAS DEL NUCLEO IBEX
+%--------------------------------------------------------------------------------
+
+\section{Pruebas del Núcleo Ibex}
+\label{sec:pruebas_ibex}
+
+Las primeras corridas de simulación se concentraron exclusivamente en el
+subsistema Ibex+BRAM (sin el periférico Reporter), con el objetivo de
+confirmar que el núcleo ejecuta el firmware correctamente antes de
+involucrar al resto de la arquitectura. Este proceso -- descripto en
+detalle como el primer, segundo y tercer filtro de la
+Sección~\ref{ssec:metodologia_diagnostico} -- permitió identificar y
+corregir tres defectos: un fallo de compilación del código DPI generado
+por la herramienta a partir del RTL de Ibex, decenas de fallos de
+aserción por puertos del núcleo sin conectar, y un desajuste de un ciclo
+en el modelo de latencia de lectura de la BRAM que provocaba una
+instrucción ilegal inmediatamente después de cualquier salto tomado. Una
+vez corregidos los tres, la simulación mostró al núcleo ejecutando el
+firmware completo sin fallos de aserción y sin instrucciones ilegales
+durante los $20\,\mu s$ simulados, incluyendo el comportamiento esperado
+de \textit{fetch} especulativo alrededor del bucle infinito final del
+programa.
+
+%--------------------------------------------------------------------------------
+%5.5) PRUEBAS DE GENERACION DE EVENTOS
+%--------------------------------------------------------------------------------
+
+\section{Pruebas de Generación de Eventos}
+\label{sec:pruebas_eventos}
+
+Con el núcleo Ibex verificado, el siguiente objetivo fue confirmar que el
+módulo Reporter captura correctamente los eventos que el firmware genera
+mediante escrituras a las direcciones reservadas (\texttt{0x80000008},
+\texttt{0x8000000C} y \texttt{0x80000010}, Sección~\ref{sec:axi_reporter}).
+Esta verificación expuso dos defectos relevantes: primero, que la lógica
+de captura comparaba contra una única dirección (\texttt{0x80000000}) que
+el firmware nunca utiliza -- por lo que el contador de diagnóstico daba
+siempre cero en hardware, de forma perfectamente reproducible --,
+corregido comparando contra las direcciones reales; y segundo, que el mapa
+de registros de lectura por AXI-Lite no alcanzaba a exponer todos los
+eventos capturados (limitado originalmente por un ancho de dirección
+insuficiente), ampliado a los $8$ registros de la
+Tabla~\ref{tab:mapa_registros_reporter}. Tras ambas correcciones, la
+simulación confirmó que cada escritura del Ibex a una de las tres
+direcciones reservadas se refleja correctamente en el registro
+\textit{sticky} correspondiente (\texttt{EVT\_PC}, \texttt{EVT\_I} o
+\texttt{EVT\_D}).
+
+%--------------------------------------------------------------------------------
+%5.6) VERIFICACION DE LA ADQUISICION DE TIMESTAMPS
+%--------------------------------------------------------------------------------
+
+\section{Verificación de la Adquisición de \textit{Timestamps}}
+\label{sec:verificacion_timestamps}
+
+El contador libre de $64$ bits que provee la base de tiempo de hardware
+(\texttt{TIMESTAMP\_LO}/\texttt{TIMESTAMP\_HI}, Tabla~
+\ref{tab:mapa_registros_reporter}) se verificó de forma independiente del
+resto del mecanismo de captura de eventos: al operar en el dominio de
+$100\text{ MHz}$ propio del Reporter, se confirmó en simulación que se
+incrementa de forma monótona y continua desde el instante en que se libera
+el reset general del sistema, sin depender de que el núcleo Ibex esté o no
+ejecutando firmware. Esta independencia es intencional: permite que Linux
+feche sus propias lecturas periódicas del Reporter con una base de tiempo
+común, sin necesidad de que el Ibex participe en absoluto de la generación
+de la marca temporal.
+
+%--------------------------------------------------------------------------------
+%5.7) VERIFICACION DE LA SINCRONIZACION ENTRE DOMINIOS DE RELOJ
+%--------------------------------------------------------------------------------
+
+\section{Verificación de la Sincronización entre Dominios de Reloj}
+\label{sec:verificacion_cdc}
+
+Esta es la prueba más crítica de todo el proceso de verificación, dado que
+el problema de cruce de dominios de reloj (\textit{Clock Domain Crossing},
+CDC) fue, en una primera instancia, la causa raíz del síntoma reportado
+originalmente: un contador de diagnóstico que permanecía en cero de forma
+reproducible. Para poder reproducir y verificar este mecanismo en
+simulación -- y no solo por inspección de código -- el \textit{testbench}
+se extendió para instanciar el periférico Reporter completo con su propio
+generador de reloj de $100\text{ MHz}$, independiente y asíncrono respecto
+del reloj de $50\text{ MHz}$ del Ibex (Sección~\ref{ssec:tb_como_top}),
+junto con un \textit{driver} AXI-Lite de lectura que permite contrastar
+explícitamente los contadores de diagnóstico \texttt{DBG\_RAW\_COUNT}
+(flancos de escritura sin sincronizar, expuestos deliberadamente sin
+protección para fines de comparación) y \texttt{DBG\_SYNC\_COUNT} (flancos
+ya resueltos por la cadena sincronizadora de tres \textit{flip-flops}). En
+operación correcta, ambos contadores deben coincidir exactamente, ya que
+cualquier divergencia entre ellos indicaría pérdida de eventos por
+metaestabilidad. La Tabla~\ref{tab:resultados_sim}
+(Sección~\ref{ssec:resultados_simulacion}) muestra que, en todas las
+corridas realizadas -- con firmwares de $2$ y de $3000$ escrituras --,
+\texttt{DBG\_RAW\_COUNT} y \texttt{DBG\_SYNC\_COUNT} coincidieron
+exactamente, confirmando que el sincronizador no pierde eventos bajo las
+condiciones de carga ensayadas.
+
+%--------------------------------------------------------------------------------
+%5.8) PRUEBAS DE LECTURA DESDE LINUX
+%--------------------------------------------------------------------------------
+
+\section{Pruebas de Lectura desde Linux}
+\label{sec:pruebas_linux}
+
+La última etapa del proceso de verificación consistió en confirmar que el
+sistema operativo Linux, ejecutándose en el Procesador de Sistema, puede
+leer de forma confiable los resultados capturados por el hardware. Esta
+prueba se realizó en dos niveles: primero, replicando en el
+\textit{testbench} de simulación (Sección~\ref{ssec:tb_como_top}) la misma
+secuencia de lecturas AXI-Lite que realiza el script
+\texttt{recolector.py} sobre el hardware real (disparo del reset por GPIO,
+seguido de una secuencia de lecturas sobre los $8$ registros del
+Reporter); y segundo, ejecutando el propio \texttt{recolector.py} sobre la
+placa Zybo reprogramada, guardando el resultado en
+\texttt{trazabilidad\_ibex.txt} para su comparación posterior
+(Sección~\ref{ssec:resultados_hardware}). Esta prueba también dejó una
+lección metodológica relevante: durante el desarrollo, el mapa de
+registros del Reporter creció incorporando el registro \texttt{EVT\_I} en
+un \textit{offset} previamente sin uso, lo que obligó a actualizar en
+consecuencia los \textit{offsets} leídos por \texttt{recolector.py} -- una
+corrida con el script desactualizado produce columnas con la etiqueta
+equivocada (aunque los datos subyacentes sigan siendo correctos),
+ilustrando por qué conviene verificar cada \textit{offset} contra el RTL
+vigente antes de interpretar los resultados de una corrida.
+
+%--------------------------------------------------------------------------------
+%5.9) PROBLEMAS DETECTADOS Y CORRECCIONES IMPLEMENTADAS
+%--------------------------------------------------------------------------------
+
+\section{Problemas Detectados y Correcciones Implementadas}
+\label{sec:problemas_correcciones}
+
+A lo largo de las pruebas descriptas en las secciones anteriores se
+identificaron y corrigieron diez defectos independientes, resumidos en la
+Tabla~\ref{tab:resumen_bugs}.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Resumen de los defectos detectados y corregidos durante el proceso de verificación.}
+\label{tab:resumen_bugs}
+\begin{tabular}{p{0.5cm}p{3.6cm}p{4.3cm}p{4.3cm}}
+\hline
+\textbf{\#} & \textbf{Síntoma} & \textbf{Causa raíz} & \textbf{Corrección} \\ \hline
+1 & Fallo de compilación en \texttt{xelab} & Exportación \texttt{DPI-C} dentro de un bloque \texttt{generate} con nombre & Exportación aislada bajo \texttt{`ifdef VERILATOR} \\
+2 & Decenas de \texttt{ASSERT FAILED} por segundo de simulación & Puertos de \texttt{ibex\_top} sin conectar, en estado \texttt{'X'} & Conexión de esos puertos a constantes seguras \\
+3 & Instrucción ilegal inmediatamente después del primer salto tomado & Latencia de la BRAM modelada en 1 ciclo (real: 2 ciclos) & Cadena de 2 \textit{flip-flops} para la señal de válido de lectura \\
+4 & Contador de diagnóstico siempre en 0 en hardware & Captura de eventos comparaba contra una única dirección que el firmware nunca usa & Comparación contra las direcciones reales de escritura \\
+5 & El fix del \#4 no llegaba al \textit{bitstream} regenerado & \texttt{.xci} del IP apuntando a un directorio de generación residual de una sesión de \textit{IP Packager} & Replicación manual del fix en ambas copias (pendiente resolver de fondo) \\
+6--7 & \textit{Offsets} de diagnóstico aliaseados; sin sincronizador de CDC & Mapa de registros incompleto; muestreo combinacional entre dominios de reloj & Mapa de 8 registros; registros \textit{sticky} + sincronizador de 3 \textit{flip-flops} \\
+8 & Los fixes de un IP no se reflejaban tras \texttt{reset\_run} & Las corridas de síntesis \textit{Out-of-Context} de cada IP no se reseteaban junto con la del proyecto top & \texttt{reset\_run} explícito de todas las corridas, incluidas las OOC \\
+9 & \textit{Driver} AXI-Lite del \textit{testbench} colgado & Carrera de muestreo en el mismo flanco de \texttt{posedge} & Muestreo en \texttt{negedge}, \texttt{ARVALID} sostenido hasta \texttt{RVALID} \\
+10 & \texttt{EVT\_I} inexistente pese a ser asumido por firmware y script & Registro nunca implementado en el RTL & Registro \texttt{evt\_i\_o} agregado en el offset \texttt{0x14} \\ \hline
+\end{tabular}
+\end{table}
+
+
+%--------------------------------------------------------------------------------
+%5.10) RESULTADOS EXPERIMENTALES
+%--------------------------------------------------------------------------------
+
+\section{Resultados Experimentales}
+\label{sec:resultados}
+
+\subsection{Resultados de Simulación de Extremo a Extremo}
+\label{ssec:resultados_simulacion}
+
+La Tabla~\ref{tab:resultados_sim} resume los valores obtenidos en las
+corridas de simulación con el \textit{testbench} extendido (\textit{driver}
+AXI-Lite leyendo el mapa de registros completo del Reporter,
+Tabla~\ref{tab:mapa_registros_reporter}), para dos firmwares distintos, en
+contraste con los valores esperados calculados analíticamente:
+
+\begin{table}[htbp]
+\centering
+\caption{Resultados de la simulación de extremo a extremo (\textit{snapshot} \texttt{tb\_reporter\_cdc\_behav}), valores esperados vs. obtenidos.}
+\label{tab:resultados_sim}
+\begin{tabular}{lll}
+\hline
+\textbf{Firmware} & \textbf{Registro} & \textbf{Valor esperado / obtenido} \\ \hline
+\texttt{sanity\_check.c} & \texttt{DBG\_RAW\_COUNT} / \texttt{DBG\_SYNC\_COUNT} & $2$ / $2$ \\
+\texttt{sanity\_check.c} & \texttt{EVT\_PC} & \texttt{0xCAFEF00D} \\
+\texttt{sanity\_check.c} & \texttt{EVT\_D} & \texttt{0xDEADBEEF} \\
+\texttt{reporter.c} ($N=1000$) & \texttt{DBG\_RAW\_COUNT} / \texttt{DBG\_SYNC\_COUNT} & $3000$ / $3000$ \\
+\texttt{reporter.c} ($N=1000$) & \texttt{EVT\_PC} & \texttt{0x0000010C} \\
+\texttt{reporter.c} ($N=1000$) & \texttt{EVT\_I} & $999$ \\
+\texttt{reporter.c} ($N=1000$) & \texttt{EVT\_D} & \texttt{0x14E875E1} \\ \hline
+\end{tabular}
+\end{table}
+
+En ambos casos, la totalidad de los valores leídos por el \textit{driver}
+AXI-Lite coincidió exactamente con el valor esperado, validando en
+simulación el mecanismo completo de captura y sincronización entre
+dominios de reloj antes de proceder a su verificación en hardware real.
+
+%--------------------------------------------------------------------------------
+%(sigue dentro de 5.10, como subsection) RESULTADOS EN HARDWARE REAL
+%--------------------------------------------------------------------------------
+
+\subsection{Resultados en Hardware Real}
+\label{ssec:resultados_hardware}
+
+Con el bitstream generado a partir del diseño verificado en simulación, se
+reprogramó la placa Zybo y se ejecutó \texttt{recolector.py} sobre el
+sistema Linux embebido, con el firmware \texttt{reporter.c} ($N=1000$)
+precargado en la BRAM de instrucciones. De las muestras válidas
+registradas en \texttt{trazabilidad\_ibex.txt}, se obtuvo:
+\begin{itemize}
+    \item \texttt{EVT\_PC} constante en \texttt{0x0000010C} en todas las
+    muestras -- coincide exacto con el valor predicho por simulación.
+    \item Valor final de \texttt{EVT\_D}: $350{,}778{,}849$ decimal, es
+    decir \texttt{0x14E875E1} en hexadecimal -- coincide exacto con el
+    valor predicho por simulación.
+    \item Valor final de \texttt{EVT\_I}: $999$ -- coincide exacto con el
+    valor predicho por simulación.
+\end{itemize}
+
+Los tres valores, observables de forma completamente independiente entre
+sí, coinciden de manera exacta entre lo predicho analíticamente, lo
+verificado en simulación y lo medido en la placa física real, validando de
+punta a punta la cadena completa: núcleo Ibex ($50\text{ MHz}$) $\rightarrow$
+memoria de instrucciones $\rightarrow$ captura y sincronización de eventos
+en \texttt{reporter\_core.sv} ($\text{CDC } 50 \rightarrow 100\text{ MHz}$)
+$\rightarrow$ banco de registros AXI-Lite $\rightarrow$ recolección desde
+Linux ($\texttt{recolector.py}$).
+
+\textbf{Nota metodológica:} durante el desarrollo, el mapa de registros del
+Reporter creció incorporando el registro \texttt{EVT\_I} (offset
+\texttt{0x14}, previamente sin uso), lo que obligó a actualizar en
+consecuencia los \textit{offsets} leídos por \texttt{recolector.py}. Este
+episodio ilustra por qué, en un diseño que evoluciona, verificar cada
+\textit{offset} contra el RTL vigente -- y no solo contra la documentación
+o versiones anteriores del script de recolección -- resulta indispensable
+antes de interpretar los resultados de una corrida.
+
+%--------------------------------------------------------------------------------
+%5.11) ANALISIS DE RESULTADOS
+%--------------------------------------------------------------------------------
+
+\section{Análisis de Resultados}
+\label{sec:analisis_resultados}
+
+La coincidencia exacta, en las tres instancias observadas de forma
+independiente (\texttt{EVT\_PC}, \texttt{EVT\_D} y \texttt{EVT\_I}), entre
+los valores predichos analíticamente, los obtenidos en simulación y los
+medidos en la placa física real, constituye evidencia sólida de que la
+arquitectura funciona de punta a punta tal como fue diseñada, y de que el
+proceso de verificación por simulación descripto en la
+Sección~\ref{sec:metodologia_debug} es representativo del comportamiento
+real del hardware sintetizado. Asimismo, la coincidencia entre
+\texttt{DBG\_RAW\_COUNT} y \texttt{DBG\_SYNC\_COUNT} en todas las corridas
+realizadas (Sección~\ref{sec:verificacion_cdc}) indica que el
+sincronizador de cruce de dominios de reloj no pierde eventos bajo las
+condiciones de carga ensayadas hasta el momento (hasta $3000$ escrituras
+consecutivas, con el firmware \texttt{reporter.c}).
+
+No obstante, corresponde señalar explícitamente los límites de lo
+verificado hasta el momento:
+
+\begin{itemize}
+    \item El módulo Reporter retiene únicamente el \textbf{último} evento
+    capturado en cada registro \textit{sticky}, y no mantiene un historial
+    ni una cola (\textit{FIFO}) de eventos previos. En consecuencia,
+    cuando el firmware ejecuta muchas más escrituras de las que el script
+    de recolección alcanza a muestrear en el mismo intervalo de tiempo, la
+    mayoría de las lecturas observan el mismo valor final, no una traza
+    continua de la ejecución -- una limitación de la arquitectura, no un
+    defecto de la implementación.
+    \item El camino de \textbf{lectura} del Reporter desde el lado del
+    Ibex (por ejemplo, una eventual instrucción \texttt{lw} que consultara
+    \texttt{current\_timestamp} desde el firmware) no cuenta con el mismo
+    tratamiento de sincronización que el camino de escritura, y no fue
+    ejercitado por ningún firmware utilizado hasta el momento (ni
+    \texttt{sanity\_check.c} ni \texttt{reporter.c} leen del Reporter). Si
+    en el futuro se incorpora firmware que realice esta operación, este
+    camino requeriría el mismo análisis de CDC aplicado al camino de
+    escritura antes de considerarse verificado.
+    \item Las pruebas de sincronización entre dominios de reloj se
+    realizaron bajo la carga de escritura generada por los dos firmwares
+    disponibles (hasta $3000$ escrituras consecutivas a $50\text{ MHz}$);
+    no se ensayaron patrones de escritura más agresivos (por ejemplo, una
+    escritura por ciclo de forma sostenida) que pudieran ejercitar de
+    manera más exigente al sincronizador.
+\end{itemize}
+
+En conjunto, los resultados obtenidos permiten concluir que la hipótesis
+central de este trabajo -- la viabilidad de un mecanismo de trazabilidad
+de hardware con efecto sonda nulo, robusto frente al cruce entre dominios
+de reloj asíncronos -- queda validada para el alcance efectivamente
+ensayado, dejando explícitamente identificados los aspectos que excedieron
+ese alcance como trabajo futuro.

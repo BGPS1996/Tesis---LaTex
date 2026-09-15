@@ -330,20 +330,33 @@ El mecanismo propuesto adopta un enfoque de observación pasiva en hardware (\te
 \subsection{Generación de Marcas Temporales (Timestamps) en Hardware}
 \label{ssec:generacion_timestamps}
 
-Para cumplir con la precisión que exige un Sistema de Tiempo Real Estricto (\textit{Hard Real-Time}), la medición no puede depender de contadores gestionados por el sistema operativo, dadas las latencias variables de interrupción. Por ello, la generación de marcas temporales (\textit{timestamps}) se implementa mediante un circuito digital dedicado en la Lógica Programable (PL).
+Para cumplir con la precisión que exige un Sistema de Tiempo Real
+     Estricto (\textit{Hard Real-Time}), la medición no puede depender de
+     contadores gestionados por el sistema operativo, dadas las latencias
+     variables de interrupción. Por ello, la generación de marcas
+     temporales (\textit{timestamps}) se implementa mediante un circuito
+     digital dedicado en la Lógica Programable (PL), alimentado por un
+     reloj de $100\text{ MHz}$ generado internamente por el Procesador de
+     Sistema (PS7) y exclusivo del periférico Reporter -- independiente
+     del reloj de $50\text{ MHz}$ que utiliza el núcleo Ibex. A partir de
+     esta señal se instancia un contador de giro libre en hardware puro de
+     $64\text{ bits}$, que se incrementa cada $10\text{ ns}$.
 
-El diseño parte del oscilador base de 125 MHz de la placa Zybo, el cual es procesado mediante un bloque \textit{Clock Wizard} (PLL/MMCM) para sintetizar un reloj estable de \textbf{50 MHz} exclusivo para el dominio del Ibex y el Reporter. A partir de esta señal, se instancia un contador de giro libre en hardware puro (\texttt{hw\_timestamp}). 
+     La implementación del sistema sobre la arquitectura heterogénea Zynq
+     presenta un desafío clásico de diseño digital: la coexistencia de
+     dominios de reloj asíncronos. En este caso puntual, el desafío no se
+     encuentra entre el procesador ARM (PS) y la Lógica Programable (PL)
+     en general -- ese cruce ya lo resuelve de forma transparente la
+     infraestructura AXI del fabricante -- sino específicamente entre los
+     dos relojes que conviven dentro de la propia PL: el núcleo Ibex,
+     operando a $50\text{ MHz}$, y el periférico Reporter, operando a
+     $100\text{ MHz}$, sin relación de fase fija entre ambos. Transmitir
+     señales de un dominio al otro sin las debidas precauciones es
+     propenso a generar metaestabilidad y pérdida de eventos, problema que
+     se resuelve mediante el esquema de registros \textit{sticky} más
+     sincronizador de tres \textit{flip-flops} detallado en la
+     Sección~\ref{ssec:clock_wizard} del Capítulo~\ref{ch:metodologia}.
 
-Operando a 50 MHz, cada incremento del contador representa un delta temporal exacto de \textbf{20 nanosegundos}. Esta resolución garantiza una granularidad microscópica para perfilar la ejecución. El carácter no intrusivo de la asignación temporal radica en que el contador avanza en un bloque condicional (\texttt{always\_ff}) ajeno al pipeline del procesador. Cuando el código en C corriendo en el Ibex requiere dejar constancia de un tiempo, simplemente realiza una operación de carga (\texttt{lw}) apuntando a la dirección base de memoria reservada (ej. \texttt{0x80000000}). Un multiplexor lógico intercepta esta lectura y devuelve el valor del \textit{timestamp} en tiempo real, sin interrumpir el conteo ni generar detenciones en el hardware.
-
-\subsection{Problemas de Sincronización entre Dominios de Clock}
-\label{ssec:sincronizacion_clock}
-
-La implementación del sistema sobre la arquitectura heterogénea Zynq presenta un desafío clásico de diseño digital: la coexistencia de múltiples dominios de reloj asíncronos. Por un lado, el subsistema de procesamiento ARM (PS) ejecuta Linux a frecuencias del orden de los cientos de MHz; por el otro, la Lógica Programable (PL) que aloja al SUT y al Módulo Reporter opera estrictamente a 50 MHz.
-
-El principal problema surge cuando el entorno Linux intenta recolectar las marcas temporales a través de las interconexiones de memoria compartida (BRAM). Transmitir señales entre frecuencias distintas (\textit{Clock Domain Crossing} o CDC) es propenso a generar metaestabilidad temporal, lo cual corrompería la lectura de los datos de 20ns.
-
-%Para resolver este conflicto y asegurar la coherencia temporal, el diseño incorpora una validación de estado mediante una señal de referencia obligatoria. El módulo \textit{Clock Wizard} provee una señal lógica denominada \texttt{locked}, la cual asegura que el PLL ha alcanzado el enganche de fase y el reloj de 50 MHz es estable y seguro. El sistema se mantiene condicionado a esta señal para arrancar. Asimismo, el protocolo de bus AXI soluciona asincronía de la comunicación inyectando los datos de los \textit{timestamps} a través de colas de aislamiento (FIFOs asíncronas). Esto permite que el ARM lea la información de estado de la FPGA de forma segura, garantizando la validez absoluta de los datos recolectados bajo análisis.
 
 % -------------------------------------------------------------
 % SECCIÓN 5: Antecedentes (Opcional)

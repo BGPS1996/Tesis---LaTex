@@ -412,7 +412,7 @@ exponiendo hacia afuera el bus de la BRAM (\texttt{bram\_*}) y las cuatro
 señales del canal de comunicación hacia el Reporter
 (\texttt{reporter\_req\_o}, \texttt{reporter\_we\_o},
 \texttt{reporter\_addr\_o}, \texttt{reporter\_wdata\_o}) descriptas en la
-Sección~\ref{sec:cdc}. Al expandir un nivel de jerarquía (Figura
+Sección~\ref{ssec:clock_wizard}. Al expandir un nivel de jerarquía (Figura
 \ref{fig:wrapper_l1}) se observa que el wrapper es, en esta versión final
 del diseño, un contenedor directo de una única instancia interna
 (\texttt{inst\_ibex}, correspondiente al módulo
@@ -437,7 +437,7 @@ la cadena de sincronización de reset de dos etapas
 como la cadena de dos \textit{flip-flops} que modela la latencia real de
 lectura de la memoria de instrucciones
 (\texttt{instr\_rvalid\_q\_reg}/\texttt{data\_rvalid\_q\_reg}), corrección
-descripta en la Sección~\ref{sec:latencia_bram}. Esta captura constituye
+descripta en la Sección~\ref{ssec:bram_dual_port}. Esta captura constituye
 evidencia directa de que dicha corrección quedó efectivamente sintetizada
 en el diseño final, y no solo presente en el código fuente.
 
@@ -511,7 +511,7 @@ La interfaz de personalización de Vivado permite la configuración granular de 
 
 \begin{itemize}
     \item \textbf{Ancho de Datos AXI (\textit{C S00 AXI DATA WIDTH}):} Se configuró en $32$ bits, alineándose estrictamente con el bus de datos nativo del procesador RISC-V Ibex. Esta configuración permite una transferencia de datos eficiente en un único ciclo de reloj para registros de palabra completa.
-    \item \textbf{Ancho de Dirección AXI (\textit{C S00 AXI ADDR WIDTH}):} Se estableció en $4$ bits. Este valor es óptimo para la cantidad de registros internos del periférico, permitiendo un acceso mapeado en memoria dentro del espacio de direccionamiento reservado para periféricos (\textit{Memory Mapped I/O}).
+    \item \textbf{Ancho de Dirección AXI (\textit{C S00 AXI ADDR WIDTH}):} Se estableció en $5$ bits. Este valor es el mínimo necesario para direccionar de forma unívoca los $8$ registros internos del periférico (offsets \texttt{0x00} a \texttt{0x1C}, ver Tabla~\ref{tab:mapa_registros_reporter}), permitiendo un acceso mapeado en memoria dentro del espacio de direccionamiento reservado para periféricos (\textit{Memory Mapped I/O}).
 \end{itemize}
 
 Desde la perspectiva del diseño, el bloque \texttt{axi\_reporter\_0} expone una interfaz de señales que incluye las líneas de control (\textit{req}, \textit{we}, \textit{addr}) y los buses de datos de escritura y lectura. Estas señales son interconectadas directamente con el decodificador implementado en el \textit{wrapper} (\texttt{ibex\_bram\_subsystem.sv}), permitiendo que el núcleo RISC-V acceda al periférico cuando la dirección de acceso se encuentra dentro del rango lógico definido por la señal \texttt{sel\_ts}.

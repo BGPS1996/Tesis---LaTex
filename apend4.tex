@@ -1,0 +1,406 @@
+\chapter{Pipeline de Compilación del Firmware: de C a \texttt{.coe}}
+\label{ap:pipeline_firmware}
+
+\section{Instalación del Entorno de Compilación Cruzada}
+\label{sec:instalacion_toolchain}
+
+Todo el pipeline descripto en este apéndice depende de un compilador
+cruzado capaz de generar código para la arquitectura RISC-V RV32I sin
+sistema operativo de destino (\textit{bare-metal}). Este compilador no
+está disponible de forma nativa en Windows, por lo que se instaló dentro
+del Subsistema de Windows para Linux (WSL), ya utilizado también para
+empaquetar el núcleo Ibex con FuseSoC (Sección~\ref{ssec:fuse}). La
+instalación se realizó sobre una distribución Ubuntu 24.04 LTS
+(\textit{noble}) corriendo bajo WSL2, mediante los paquetes oficiales del
+repositorio de Ubuntu -- sin necesidad de compilar el \textit{toolchain}
+desde el código fuente ni de agregar repositorios de terceros:
+\begin{lstlisting}[style=bashstyle]
+sudo apt update
+sudo apt install gcc-riscv64-unknown-elf binutils-riscv64-unknown-elf
+\end{lstlisting}
+
+Esto instala, entre otras, las siguientes herramientas usadas a lo largo
+de este apéndice, identificadas por el prefijo \texttt{riscv64-unknown-elf-}
+que indica el \textit{triplet} de destino (arquitectura \texttt{riscv64},
+proveedor \texttt{unknown}, sistema operativo \texttt{elf} -- es decir,
+sin sistema operativo, solo el formato de archivo ejecutable):
+\begin{itemize}
+    \item \texttt{riscv64-unknown-elf-gcc} (versión $13.2.0$): el
+    compilador cruzado en sí, invocado con las banderas
+    \texttt{-march=rv32i -mabi=ilp32} para restringir la generación de
+    código al subconjunto entero base de 32 bits que implementa el
+    núcleo Ibex configurado.
+    \item \texttt{riscv64-unknown-elf-ld} (versión $2.42$, incluida en el
+    paquete \texttt{binutils-riscv64-unknown-elf}): el enlazador, invocado
+    internamente por \texttt{gcc} a partir del \textit{script} de
+    enlazado \texttt{link.ld} (Sección~\ref{ssec:codigo_link_ld}).
+    \item \texttt{riscv64-unknown-elf-objcopy} y
+    \texttt{riscv64-unknown-elf-readelf}: utilidades de manipulación e
+    inspección de archivos ELF, usadas en los pasos $4$ y $5$ del pipeline
+    (Sección~\ref{sec:pipeline_c_a_coe}).
+    \item \texttt{riscv64-unknown-elf-objdump}: desensamblador, usado en
+    el paso $7$ del pipeline como verificación final de cordura.
+\end{itemize}
+
+Se optó deliberadamente por esta vía, paquetes precompilados del
+repositorio oficial de Ubuntu, en vez de compilar el \textit{toolchain}
+GNU desde el código fuente (una alternativa habitual, pero que puede
+demandar más de una hora de compilación y depende de una larga cadena de
+bibliotecas de desarrollo), dado que Ubuntu 24.04 ya empaqueta una versión
+suficientemente reciente de GCC ($13.2.0$) con soporte completo para la
+extensión base de RISC-V utilizada en este trabajo. La verificación de que
+el \textit{toolchain} quedó correctamente instalado y accesible se
+realizó con:
+
+\begin{lstlisting}[style=bashstyle]
+riscv64-unknown-elf-gcc --version
+\end{lstlisting}
+
+confirmando que reporta \texttt{riscv64-unknown-elf-gcc
+(13.2.0-11ubuntu1+12) 13.2.0} antes de proceder con la compilación de
+cualquier firmware.
+
+\section{Proceso de Conversión: de \texttt{sanity\_check.c} a \texttt{firmware.coe}}
+\label{sec:pipeline_c_a_coe}
+
+Para que el núcleo Ibex ejecute un programa, la memoria BRAM de
+instrucciones debe quedar pre-cargada con su contenido binario desde el
+momento en que se programa la FPGA, en el formato de inicialización de
+coeficientes (\texttt{.coe}) que espera la primitiva \texttt{blk\_mem\_gen}
+de Xilinx (Sección~\ref{ssec:bram_dual_port}). El camino desde el código
+fuente en C hasta ese archivo \texttt{.coe} no es directo: involucra
+compilar para una arquitectura sin sistema operativo (\textit{bare-metal}),
+enlazar con un mapa de memoria específico, extraer el binario plano
+resultante, y por último traducirlo al formato de texto que Vivado puede
+interpretar como contenido inicial de la BRAM, respetando el
+desplazamiento de dirección exacto en el que arranca el código.
+
+Este proceso se automatizó en el script
+\texttt{Codigos/c2coe/build\_firmware.sh}, invocado como:
+\begin{lstlisting}[style=bashstyle]
+./build_firmware.sh <archivo.c> <profundidad_bram_en_palabras>
+\end{lstlisting}
+
+Ejemplo real usado en este trabajo (BRAM de 4096 palabras, ver Sección~\ref{sssec:bram_dimensions}):
+
+\begin{lstlisting}[style=bashstyle]
+./build_firmware.sh sanity_check.c 4096
+\end{lstlisting}
+
+El script requiere, en el mismo directorio, dos archivos de soporte
+además del \texttt{.c} a compilar: \texttt{start.S} (el punto de entrada
+en ensamblador, que inicializa el puntero de pila antes de saltar a
+\texttt{main}) y \texttt{link.ld} (el \textit{linker script} que fija la
+dirección de origen del programa en \texttt{0x00000080}, dejando los
+primeros $128$ bytes de la memoria libres por convención). El proceso
+completo consta de siete pasos, cada uno con una verificación explícita
+que detiene la ejecución ante cualquier inconsistencia, en vez de
+generar silenciosamente un \texttt{.coe} incorrecto:
+
+\begin{enumerate}
+    \item \textbf{Verificación de archivos de entrada:} confirma que el
+    \texttt{.c}, \texttt{start.S} y \texttt{link.ld} existen en el
+    directorio de trabajo antes de intentar nada.
+
+    \item \textbf{Normalización de finales de línea de \texttt{link.ld}:}
+    convierte automáticamente terminaciones de línea estilo Windows
+    (\texttt{CRLF}) a estilo Unix (\texttt{LF}) y elimina un eventual
+    \textit{Byte Order Mark} (BOM) UTF-8 al inicio del archivo. Este paso
+    es necesario porque el \textit{linker} de GNU (\texttt{ld}) puede
+    fallar o interpretar mal un \textit{script} con finales de línea
+    mixtos, un problema recurrente al editar archivos en un entorno
+    Windows y compilarlos luego bajo WSL.
+
+    \item \textbf{Compilación:} invoca al compilador cruzado con
+    banderas fijas y conocidas para no depender de configuración
+    implícita:
+
+\begin{lstlisting}[style=bashstyle]
+riscv64-unknown-elf-gcc -march=rv32i -mabi=ilp32 -nostdlib \
+    -nostartfiles -O2 -T link.ld -o firmware.elf start.S archivo.c
+\end{lstlisting}
+
+    (\texttt{-march=rv32i}/\texttt{-mabi=ilp32} restringen la generación
+    de código al subconjunto entero base de RV32, sin extensiones que el
+    núcleo Ibex configurado no implemente; \texttt{-nostdlib}/
+    \texttt{-nostartfiles} evitan enlazar contra una biblioteca estándar o
+    un \textit{runtime} de arranque inexistentes en este entorno
+    \textit{bare-metal}).
+
+    \item \textbf{Verificación de la dirección real de \texttt{.text} en
+    el ELF:} en vez de asumir que el código arranca en
+    \texttt{0x00000080} (el valor fijado en \texttt{link.ld}), el script
+    lee esa dirección directamente del archivo \texttt{.elf} recién
+    generado (\texttt{readelf -S}), y aborta con un error explícito si
+    tanto el punto de entrada como la dirección de \texttt{.text}
+    resultan ser \texttt{0x0} -- síntoma casi seguro de que el
+    \textit{linker script} no se aplicó correctamente. Este paso hace que
+    el script sea robusto ante cualquier cambio futuro del mapa de
+    memoria, sin necesidad de actualizar valores hardcodeados en el
+    propio script.
+
+    \item \textbf{Extracción del binario plano y generación del
+    \texttt{.coe}:} \texttt{objcopy -O binary} extrae el contenido crudo
+    del segmento de código y datos del \texttt{.elf}, descartando toda la
+    metadata del formato ELF. Como \texttt{objcopy} omite cualquier hueco
+    antes de la primera dirección con contenido real, un script auxiliar
+    en Python reconstruye ese hueco inicial (rellenando con ceros desde
+    \texttt{0x0} hasta la dirección real de \texttt{.text} obtenida en el
+    paso anterior), agrega el relleno final hasta completar exactamente
+    la profundidad de palabras indicada como segundo argumento, y escribe
+    el resultado en el formato de texto que exige Vivado
+    (\texttt{memory\_initialization\_radix=16;} seguido de la lista de
+    palabras de 32 bits en hexadecimal, en orden \textit{little-endian}).
+
+    \item \textbf{Verificación de tamaño contra la profundidad de la
+    BRAM:} calcula la cantidad de palabras que realmente necesita el
+    programa (binario más el desplazamiento inicial) y aborta si excede
+    la profundidad de la BRAM indicada, en vez de generar un
+    \texttt{.coe} truncado.
+
+    \item \textbf{Desensamblado de verificación:} como último chequeo, desensambla las primeras instrucciones del \texttt{.elf}
+    (\texttt{objdump -d}) para inspección visual manual, permitiendo
+    confirmar que la primera instrucción real del programa aparece en la
+    dirección esperada (\texttt{0x80}) y no en \texttt{0x0}.
+\end{enumerate}
+
+El archivo \texttt{firmware.coe} resultante es el mismo que referencia la
+propiedad \texttt{Coe\_File} del IP \texttt{bram\_instrucciones\_v2}
+(Sección~\ref{sssec:bram_dimensions}), y queda embebido directamente en el
+\textit{bitstream} al sintetizar el proyecto, no requiere que el ARM
+transfiera el firmware al Ibex en tiempo de ejecución. 
+%(AÑADIR QUE SE IMPLEMENTARA esto lo añadire en trabajo a futuro, para hacer el ibex mas versatil) 
+
+\section{Código Fuente de los Firmwares de Prueba}
+\label{sec:codigo_firmwares}
+
+Durante el desarrollo se utilizaron dos firmwares con propósitos
+complementarios: \texttt{sanity\_check.c}, un programa mínimo de dos
+escrituras fijas usado para aislar problemas de arranque de cualquier
+otra lógica (Sección~\ref{ssec:efecto_sonda_nulo}), y \texttt{reporter.c},
+el firmware con un bucle de $N$ iteraciones usado para ejercitar el
+mecanismo de trazabilidad de forma sostenida en el tiempo
+(Capítulo~\ref{ch:resultados}).
+
+\subsection{\texttt{sanity\_check.c}}
+\label{ssec:codigo_sanity\_check}
+
+\begin{lstlisting}[language=C, basicstyle=\ttfamily\footnotesize, caption={Código fuente completo de \texttt{sanity\_check.c}.}, label={code:sanity_check.c}]
+#include <stdint.h>
+
+#define REPORTER_BASE 0x80000000
+#define REG_PC (*((volatile uint32_t *) (REPORTER_BASE + 0x08)))
+#define REG_D  (*((volatile uint32_t *) (REPORTER_BASE + 0x10)))
+
+int main() {
+    
+    REG_D  = 0xDEADBEEF;
+    REG_PC = 0xCAFEF00D;
+
+    while (1);
+    return 0;
+}
+\end{lstlisting}
+
+\subsection{\texttt{reporter.c}}
+\label{ssec:codigo_reporter}
+
+\begin{lstlisting}[language=C, basicstyle=\ttfamily\footnotesize, caption={Código fuente completo de \texttt{reporter.c}, con $N=1{,}500{,}000$ (ver Sección~\ref{ssec:resultados_hardware}).}, label={code:reporter.c}]
+#include <stdint.h>
+
+// El Modulo Reporter es visto por el Ibex en la direccion 0x80000000
+#define REPORTER_BASE 0x80000000
+
+// --- Mapa de registros del Reporter v2 ---
+// 0x00 / 0x04: timestamp de hardware (solo lectura, contador libre de 64 bits)
+#define REG_TIME_LO   (*((volatile uint32_t *) (REPORTER_BASE + 0x00)))
+#define REG_TIME_HI   (*((volatile uint32_t *) (REPORTER_BASE + 0x04)))
+// 0x08 / 0x0C / 0x10: registros de evento (escritura desde el Ibex)
+#define REG_PC        (*((volatile uint32_t *) (REPORTER_BASE + 0x08)))
+#define REG_I         (*((volatile uint32_t *) (REPORTER_BASE + 0x0C)))
+#define REG_D         (*((volatile uint32_t *) (REPORTER_BASE + 0x10)))
+
+// Generador pseudoaleatorio ligero (LCG) para reemplazar la libreria estandar
+uint32_t lcg_rand(uint32_t *state) {
+    *state = *state * 1664525 + 1013904223;
+    return *state;
+}
+
+int main() {
+    uint32_t d = 0;
+    uint32_t current_pc = 0;
+    uint32_t rand_state = 12345;   // Semilla inicial
+    uint32_t N = 1500000;          // ~600ms a 50MHz, calzado con la ventana de polling de recolector.py
+
+    for (uint32_t i = 0; i < N; i++) {
+        // 1. Extraer el Program Counter actual (Magia RISC-V)
+        __asm__ volatile ("auipc %0, 0" : "=r" (current_pc));
+
+        // 2. Generar numero aleatorio
+        d = lcg_rand(&rand_state);
+
+        // 3. Escribir los datos de evento; el ARM lee el timestamp de
+        //    hardware (REG_TIME_LO/HI) de forma independiente via AXI
+        //    cada vez que muestrea, asi que no hace falta escribirlo
+        //    desde aca: es un contador libre que corre solo.
+        REG_PC = current_pc;
+        REG_I  = i;
+        REG_D  = d;
+    }
+
+    // Bucle infinito seguro al terminar, para poder observar el estado final
+    while (1);
+
+    return 0;
+}
+\end{lstlisting}
+
+\section{Componentes de Bajo Nivel: Punto de Entrada y Mapa de Memoria}
+\label{sec:codigo_bajo_nivel}
+
+Además del código en C, la compilación de cada firmware
+(Sección~\ref{sec:pipeline_c_a_coe}) depende de dos archivos de soporte
+que no cambian entre firmwares: el punto de entrada en ensamblador y el
+\textit{script} de enlazado que define el mapa de memoria. Ambos residen
+junto a \texttt{sanity\_check.c} y \texttt{reporter.c} en
+\texttt{Codigos/c2coe/}.
+
+\subsection{Punto de Entrada (\texttt{start.s})}
+\label{ssec:codigo_start_s}
+
+Como el firmware se compila con \texttt{-nostdlib -nostartfiles}
+(Sección~\ref{sec:pipeline_c_a_coe}), no existe ningún \textit{runtime} de
+arranque provisto por una biblioteca estándar que inicialice el puntero de
+pila antes de saltar a \texttt{main}: esa responsabilidad recae
+enteramente en este archivo, la primera instrucción que el Ibex ejecuta
+después de reset.
+
+\begin{lstlisting}[language={[riscv]Assembler}, basicstyle=\ttfamily\footnotesize, caption={Código fuente completo de \texttt{start.s}, el punto de entrada del firmware.}, label={code:start.s}]
+.section .text.start
+.global _start
+_start:
+    la sp, _stack_top
+    call main
+1:  j 1b
+\end{lstlisting}
+
+La secuencia es mínima mnemónicamente: \texttt{la sp, \_stack\_top} carga
+en el registro de puntero de pila (\texttt{sp}) la dirección del símbolo
+\texttt{\_stack\_top}, definido por el \textit{linker script}
+(Sección~\ref{ssec:codigo_link_ld}) como el extremo superior de la RAM
+disponible; \texttt{call main} salta a la función \texttt{main} del
+firmware en C; y la etiqueta \texttt{1: j 1b} es una salvaguarda, un
+salto incondicional a sí misma, que atrapa al núcleo en un bucle
+infinito seguro en el improbable caso de que \texttt{main} retorne (los
+dos firmwares de este trabajo ya terminan en su propio \texttt{while(1)},
+por lo que esta salvaguarda nunca llega a ejercitarse en la práctica).
+
+
+\subsection{Mapa de Memoria (\texttt{link.ld})}
+\label{ssec:codigo_link_ld}
+
+\begin{lstlisting}[language=make, basicstyle=\ttfamily\footnotesize, caption={Código fuente completo de \texttt{link.ld}, el script de enlazado que define el mapa de memoria del firmware.}, label={code:link.ld}]
+MEMORY
+{
+  RAM (rwx) : ORIGIN = 0x00000000, LENGTH = 16K
+}
+SECTIONS
+{
+  .text 0x00000080 : { *(.text.start) *(.text*) } > RAM
+  .data : { *(.data*) } > RAM
+  .bss  : { *(.bss*) *(COMMON) } > RAM
+  _stack_top = ORIGIN(RAM) + LENGTH(RAM);
+}
+\end{lstlisting}
+
+Este \textit{script} define una única región de memoria (\texttt{RAM}) de
+$16\text{K}$ (los $4096$ celdas de $32$ bits reales de la BRAM, ver
+Sección~\ref{sssec:bram_dimensions}), y ubica la sección \texttt{.text}, que agrupa primero \texttt{.text.start} (el punto de entrada de
+\texttt{start.s}) y luego el resto del código compilado, a partir de la
+dirección \texttt{0x00000080}, dejando los primeros $128$ bytes de la
+BRAM sin usar por convención. El símbolo \texttt{\_stack\_top}, referenciado
+desde \texttt{start.s}, se define aquí como el extremo superior exacto de
+la región \texttt{RAM} (\texttt{ORIGIN + LENGTH}), de modo que la pila
+crece hacia abajo desde el final de la memoria disponible, tan lejos como
+sea posible del código y los datos del programa.
+
+\section{Script Alternativo de Conversión: \texttt{bin2coe.py}}
+\label{sec:bin2coe}
+
+El paso 5 de \texttt{build\_firmware.sh} (Sección~\ref{sec:pipeline_c_a_coe})
+resuelve la conversión de binario plano a \texttt{.coe} mediante un
+fragmento de Python embebido directamente en el propio \textit{script} de
+\textit{shell}. Ese fragmento no es más que una copia funcionalmente
+equivalente de \texttt{Codigos/c2coe/bin2coe.py}, un script independiente
+y reutilizable que implementa la misma lógica de relleno (\textit{padding})
+como una función invocable por separado, útil para regenerar o depurar un
+\texttt{.coe} a partir de un \texttt{.bin} ya existente sin necesidad de
+volver a compilar ni de contar con \texttt{start.s}/\texttt{link.ld} a
+mano:
+
+\begin{lstlisting}[language=Python, basicstyle=\ttfamily\footnotesize, caption={Código fuente completo de \texttt{bin2coe.py}.}, label={code:bin2coe.py}]
+import sys
+
+def bin2coe(bin_path, coe_path, depth_words, start_addr=0x80, word_size=4, radix=16):
+    """
+    Convierte un binario plano (extraído con objcopy -O binary) a .coe,
+    compensando el hecho de que objcopy omite cualquier hueco antes de la
+    primera dirección con contenido real (en nuestro caso, 0x80, definido
+    por `. = 0x00000080;` en link.ld).
+
+    Sin este padding, el primer byte del .bin queda alineado a la
+    dirección 0x00 de la BRAM en vez de 0x80, corriendo todo el programa
+    hacia atrás y haciendo que el Ibex arranque en medio de una
+    instrucción equivocada.
+    """
+    with open(bin_path, "rb") as f:
+        data = f.read()
+
+    # 1. Reconstruir el hueco inicial (0x00 .. start_addr-1) con ceros
+    padded = b'\x00' * start_addr + data
+
+    total_bytes = depth_words * word_size
+    if len(padded) > total_bytes:
+        raise ValueError(
+            f"El binario con padding ({len(padded)} bytes, incluyendo "
+            f"{start_addr} bytes de offset) no entra en la BRAM "
+            f"({total_bytes} bytes). Programa demasiado grande o "
+            f"profundidad de BRAM insuficiente."
+        )
+
+    # 2. Padding final hasta completar la profundidad exacta de la BRAM
+    padded += b'\x00' * (total_bytes - len(padded))
+
+    words = []
+    for i in range(0, len(padded), word_size):
+        val = int.from_bytes(padded[i:i+word_size], byteorder="little")
+        words.append(f"{val:0{word_size*2}X}")
+
+    with open(coe_path, "w") as f:
+        f.write(f"memory_initialization_radix={radix};\n")
+        f.write("memory_initialization_vector=\n")
+        f.write(",\n".join(words))
+        f.write(";\n")
+
+    print(f"OK: {coe_path} generado. {len(words)} palabras totales "
+          f"({start_addr} bytes de offset inicial + {len(data)} bytes de "
+          f"programa real + padding final).")
+
+if __name__ == "__main__":
+    if len(sys.argv) < 4:
+        print("Uso: python3 bin2coe.py <entrada.bin> <salida.coe> <profundidad_en_palabras> [start_addr_hex]")
+        print("Ejemplo: python3 bin2coe.py firmware.bin firmware.coe 2048 0x80")
+        sys.exit(1)
+    start = int(sys.argv[4], 16) if len(sys.argv) > 4 else 0x80
+    bin2coe(sys.argv[1], sys.argv[2], depth_words=int(sys.argv[3]), start_addr=start)
+\end{lstlisting}
+
+Invocado de forma independiente (por ejemplo, a partir de un
+\texttt{firmware.bin} ya generado por otra vía), su uso es:
+\begin{lstlisting}[style=bashstyle]
+    python3 bin2coe.py firmware.bin firmware.coe 4096 0x80
+\end{lstlisting}
+donde el tercer argumento es la profundidad de la BRAM en palabras de 32
+bits, y el cuarto (opcional, \texttt{0x80} por defecto) es la dirección
+de inicio del código -- debe coincidir siempre con la dirección fijada en
+\texttt{link.ld} (Sección~\ref{ssec:codigo_link_ld}).

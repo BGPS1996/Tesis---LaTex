@@ -165,7 +165,10 @@ El procesador Ibex está basado en una arquitectura tipo Harvard, por lo que req
     \item \textbf{Puerto B (Lectura/Escritura para SUT):} Se utiliza para la carga y almacenamiento de variables o punteros generados durante la ejecución del programa.
 \end{itemize}
 
-Además, la herramienta de síntesis fue configurada para aceptar un archivo de inicialización de coeficientes (\texttt{.coe}), el cual permite que la memoria BRAM se instancie con el firmware del Ibex pre-cargado desde el momento exacto en que se programa la FPGA (\textit{bitstream}), eliminando la necesidad de que el ARM transfiera el código de arranque rutinariamente.
+Además, la herramienta de síntesis fue configurada para aceptar un archivo de inicialización de coeficientes (\texttt{.coe}), el cual permite que la memoria BRAM se instancie con el firmware del Ibex
+    pre-cargado desde el momento exacto en que se programa la FPGA (\textit{bitstream}), eliminando la necesidad de que el ARM transfiera el código de arranque rutinariamente. El proceso completo
+    de compilación, desde el código fuente en C hasta este archivo \texttt{.coe} -- incluyendo la instalación del \textit{toolchain} y el código fuente completo de los firmwares utilizados -- se
+    documenta en detalle en el Apéndice~\ref{ap:pipeline_firmware}.
 
 \subsubsection{Dimensionamiento y Configuración de Celdas}
 \label{sssec:bram_dimensions}
@@ -174,8 +177,9 @@ El bloque de memoria local del procesador de prueba fue dimensionado de manera e
 
 \begin{itemize}
     \item \textbf{Ancho de Palabra del Bus (\textit{Data Width}):} Configurado nativamente en \textbf{$32\text{ bits}$}. Esto coincide exactamente con el tamaño de palabra de la arquitectura de la ISA RISC-V (RV32I) implementada por el núcleo Ibex, permitiendo transferencias completas de instrucciones y datos en un único ciclo sin necesidad de deserialización.
-    \item \textbf{Profundidad de Celdas (\textit{Memory Depth}):} Se fijó una profundidad de \textbf{$2048$ celdas} (posiciones de memoria discretas).                                                                                             %<<<<-------------------- REVISAR LOS DATOS.
-    \item \textbf{Capacidad Total de Almacenamiento:} El producto de las dimensiones físicas ($2048 \text{ posiciones} \times 32 \text{ bits}$) equivale a un total de $65,536\text{ bits}$ de memoria interna. En términos de almacenamiento direccionable por bytes, esto representa una capacidad neta de \textbf{$8\text{ KiB}$}, dimensionada en estricta consonancia con las restricciones de direccionamiento asignadas en el bus del sistema.
+    \item \textbf{Profundidad de Celdas (\textit{Memory Depth}):} Se fijó una profundidad de \textbf{$4096$ celdas} (posiciones de memoria discretas).
+     \item \textbf{Capacidad Total de Almacenamiento:} El producto de las dimensiones físicas ($4096 \text{ posiciones} \times 32 \text{ bits}$) equivale a un total de $131{,}072\text{ bits}$ de memoria interna. En términos de almacenamiento direccionable por bytes, esto representa una capacidad neta de \textbf{$16\text{ KiB}$}, si bien la ventana de acceso expuesta a Linux a través del \textit{AXI BRAM Controller} se limita a los primeros $8\text{ KiB}$ (ver Tabla~\ref{tab:mapa_memoria}).
+
 \end{itemize}
 
 \subsubsection{Mapeo Cruzado de Direcciones del Sistema}
@@ -201,7 +205,13 @@ HR-RT-Reporter (IP Core)       & \texttt{0x43C00000}		& $64\text{ KB}$	& \texttt
 
 Como se observa en la distribución de la tabla, la ventana del controlador de memoria \textit{AXI BRAM Controller} está dimensionada con un rango lógico de asignación de $8\text{ KB}$ en el bus ARM (restringido desde la dirección \texttt{0x40000000} hasta \texttt{0x40002000}), lo cual se acopla de manera simétrica con la capacidad física real de la memoria local direccionada por el Ibex a partir de su dirección interna \texttt{0x00000000}.
 
-De igual manera, el módulo de trazabilidad por hardware es accedido por el ARM para la extracción asíncrona de marcas de tiempo en la dirección física \texttt{0x43C00000}, mientras que el Ibex únicamente requiere escribir en la dirección de frontera \texttt{0x80000000} para activar instantáneamente los disparadores de captura sin provocar retrasos por contención de buses.
+De igual manera, el módulo de trazabilidad por hardware es accedido
+    por el ARM para la extracción asíncrona de marcas de tiempo en la
+    dirección física \texttt{0x43C00000}, mientras que el Ibex escribe
+    directamente en las tres direcciones reservadas dentro de ese mismo
+    rango (\texttt{0x80000008}, \texttt{0x8000000C} y \texttt{0x80000010},
+    ver Sección~\ref{sec:axi_reporter}) para activar los disparadores de
+    captura sin provocar retrasos por contención de buses.
 
 % =======================================================================
 % COMPLEMENTO DE LA SECCIÓN 3: Exclusión Mutua
@@ -236,11 +246,8 @@ El núcleo de la propuesta metodológica de este Proyecto Final Integrador recae
 \subsection{Generación de Timestamps por Hardware}
 \label{ssec:timestamps_hw}
 
-La medición de tiempos en sistemas operativos de propósito general (como Linux ejecutándose en el procesador ARM) está sujeta a latencias variables causadas por la planificación de procesos (\textit{scheduling}), manejo de interrupciones y políticas de caché. Para erradicar estas imprecisiones, el módulo \texttt{axi\_reporter} implementa un cronómetro de hardware dedicado basado en un contador ascendente continuo de $64\text{ bits}$.
-
-Este contador es alimentado directamente por la señal de reloj purificada de $50\text{ MHz}$ proveniente del bloque \textit{Clocking Wizard}, operando en estricto sincronismo con el núcleo Ibex. Como consecuencia, el registro temporal se incrementa de forma inexorable cada ciclo de reloj, proveyendo una base de tiempo monótona con una resolución discreta y absoluta de $20\text{ ns}$.
-
-El contador de $64\text{ bits}$ se inicializa en cero durante el estado de reinicio general del sistema y, una vez liberado, es capaz de registrar un tiempo de ejecución continuo superior a $11,000$ años antes de sufrir un desbordamiento de entero (\textit{overflow}), lo que garantiza una cobertura temporal más que suficiente para cualquier ensayo de verificación en software de misión crítica.
+Este contador es alimentado directamente por el reloj de
+$100\text{ MHz}$ propio del periférico Reporter (\texttt{FCLK\_CLK0} del Procesador de Sistema), operando de forma independiente y asíncrona respecto del reloj de $50\text{ MHz}$ del núcleo Ibex. Como consecuencia, el registro temporal se incrementa de forma inexorable cada ciclo de reloj de $100\text{ MHz}$, proveyendo una base de tiempo monótona con una resolución discreta y absoluta de $10\text{ ns}$.
 
 \subsection{Mecanismo de Intercepción No Intrusiva (Efecto Sonda Nulo)}
 \label{ssec:efecto_sonda_nulo}
@@ -266,10 +273,23 @@ Para lograr una intrusión nula, el sistema HR-RT-Reporter implementa una lógic
   distingue el tipo de evento comparando la dirección exacta de cada
   escritura entrante, en lugar de tratar la totalidad del rango como un
   único registro pasivo indiferenciado.
-    \item \textbf{Captura Instantánea en Silicio:} Cuando la lógica de arbitraje del subsistema detecta una validación en el bus con la dirección de frontera reporter\_core.sv distingue el TIPO de evento por la
-    direccion real que usa el firmware, no por una unica direccion: escrituras a 0x80000008 capturan EVT\_PC, a 0x8000000C capturan EVT\_I (agregado en esta ultima sesion, ver 2.7), a 0x80000010 capturan EVT\_D. El filtrado de rango general (0x8000\_0000-0x8FFF\_FFFF) lo hace la señal sel\_ts en
-    ibex\_bram\_subsystem.sv, aguas arriba del Reporter.
-    \item \textbf{Registro Asíncrono:} En el flanco de subida del reloj inmediato al disparo (un tiempo transitorio de exactamente 1 ciclo de reloj, $20\text{ ns}$), el \texttt{axi\_reporter} captura y almacena en su registro interno el valor exacto del contador de $64\text{ bits}$ en ese instante, junto con el dato o identificador de evento emitido por el procesador en el bus de escritura (\texttt{data\_wdata}).
+    \item \textbf{Sincronización entre Dominios de Reloj (CDC):} Dado que
+    el núcleo Ibex opera a $50\text{ MHz}$ y el periférico Reporter a
+    $100\text{ MHz}$ -- dos dominios de reloj asíncronos entre sí, ver
+    Sección~\ref{ssec:clock_wizard} -- el pulso de escritura no puede
+    muestrearse de forma combinacional sin riesgo de metaestabilidad. Del
+    lado del Ibex, un par de registros \textit{sticky} retienen la
+    dirección y el dato de la última escritura hasta la siguiente; del
+    lado del Reporter, una cadena sincronizadora de tres
+    \textit{flip-flops} resuelve de forma segura el pulso de escritura
+    entrante antes de disparar la captura del evento.
+    \item \textbf{Registro del Evento:} Una vez resuelto el pulso de
+    escritura por el sincronizador -- con una latencia de dos a tres
+    ciclos del reloj de $100\text{ MHz}$, es decir entre $20$ y
+    $30\text{ ns}$ -- el \texttt{axi\_reporter} captura y almacena en sus
+    registros internos \textit{sticky} el valor exacto del contador de
+    $64\text{ bits}$ en ese instante, junto con el dato o índice de evento
+    retenido por los registros \textit{sticky} del lado del Ibex.
 \end{enumerate}
 
 Debido a que el procesador RISC-V ejecuta la instrucción de almacenamiento como parte de su flujo natural de memoria de un ciclo sin experimentar ciclos de espera (\textit{wait states}) ni bloqueo de bus, el overhead de instrumentación en el tiempo de ejecución del algoritmo es estrictamente constante y matemáticamente acotado a cero ciclos de penalización por arbitraje, garantizando el cumplimiento de la propiedad de Efecto Sonda Nulo.
@@ -334,8 +354,12 @@ pérdida de eventos por metaestabilidad en el cruce de dominios de reloj.
 \end{tabular}
 \end{table}
 
-Estos 8 \textit{offsets} se leen desde el lado AXI-Lite/Linux (base \texttt{0x43C00000}), y no son tres direcciones de  escritura que usa el firmware del lado del Ibex
-(\texttt{0x80000008}/\texttt{0x8000000C}/\texttt{0x80000010}.
+Estos 8 \textit{offsets} se leen desde el lado AXI\-Lite/Linux (base
+    \texttt{0x43C00000}), y no deben confundirse con las tres direcciones
+    de escritura que usa el firmware del lado del Ibex
+    (\texttt{0x80000008}/\texttt{0x8000000C}/\texttt{0x80000010}, ver
+    Tabla~\ref{tab:mapa_memoria}) -- son dos espacios de direcciones
+    distintos para el mismo periférico.
 
 % =======================================================================
 % SECCIÓN 5: Interconexión y Mapeo del Sistema
@@ -348,14 +372,16 @@ Para articular el intercambio de información entre el dominio del maestro gener
 \subsection{Configuración de los Bloques AXI}
 \label{ssec:config_axi}
 
-La comunicación se centraliza a través del bloque IP \textit{AXI Interconnect}, configurado para expandir el puerto maestro de propósito general del ARM (\texttt{M\_AXI\_GP0}) hacia cuatro puertos esclavos independientes M-AXI4-Lite operando a una frecuencia de bus de $100\text{ MHz}$. Las direcciones físicas de mapeo para los registros de control y datos se estructuraron como se muestra en la tabla \ref{tab:mapa_memoria}.
-%de la siguiente manera:
-%\begin{itemize}
-%    \item \textbf{\texttt{0x40000000} (AXI BRAM Controller):} Proporciona una ventana de acceso de $8\text{ KB}$ que permite a Linux inicializar y leer la memoria local del procesador Ibex.
-%    \item \textbf{\texttt{0x41200000} (AXI GPIO 0 - SUT Reset):} Dedicado exclusivamente al control de la señal de reinicio del procesador RISC-V, acoplado a un canal de $1\text{ bit}$ como salida digital de hardware.
-%    \item \textbf{\texttt{0x41210000} (AXI GPIO 1 - Debug LEDs):} Canal digital de $4\text{ bits}$ mapeado hacia los diodos emisores de luz físicos de la placa Zybo para diagnóstico visual rápido del estado operativo.
-%    \item \textbf{\texttt{0x43C00000} (HR-RT-Reporter IP):} Dirección base del periférico de trazabilidad, a través de cuya estructura de registros de $64\text{ KB}$ el procesador ARM extrae las marcas temporales (\textit{timestamps}) y banderas de estado capturadas por el silicio.
-%\end{itemize}
+La comunicación se centraliza a través del bloque IP \textit{AXI
+    Interconnect}, configurado para expandir el puerto maestro de
+    propósito general del ARM (\texttt{M\_AXI\_GP0}) hacia cuatro puertos
+    esclavos independientes M-AXI4-Lite operando a una frecuencia de bus
+    de $100\text{ MHz}$. Las direcciones físicas de mapeo para los
+    registros de control y datos se estructuraron como se muestra en la
+    tabla \ref{tab:mapa_memoria}. El detalle completo de las conexiones
+    punto a punto autogeneradas por Vivado para cada bloque IP del
+    diseño se incluye en el Apéndice~\ref{ap:conexiones}.
+
 
 \subsection{Gatillo de Arranque en Hardware (AXI GPIO)}
 \label{ssec:gatillo_arranque}
@@ -403,7 +429,7 @@ Dado que la plataforma HR-RT-Reporter delega toda la criticidad temporal y la ca
 
 Esta técnica se implementó valiéndose de la función de llamada al sistema \texttt{mmap}, la cual proyecta un rango de direcciones físicas del bus AXI (expuesto a través de la partición virtual de memoria del kernel \texttt{/dev/mem}) directamente en el espacio de memoria virtual de un proceso de usuario. De esta forma, aplicaciones estándar de alto nivel pueden acceder a los registros físicos de la FPGA mediante punteros de puntero de lectura y escritura directos, logrando una velocidad de transferencia cercana a la nativa del hardware sin incurrir en cambios de contexto hacia el modo supervisor del kernel.
 
-\subsection{Scripts de Validación y Recolección de Datos}
+\subsection{Scripts de Validación primeros ensayos}
 \label{ssec:scripts_recopilacion}
 
 El control operativo del flujo de verificación se automatizó mediante el desarrollo de un conjunto de rutinas y scripts estructurados en el lenguaje de programación Python, los cuales operan en el sistema operativo Linux empotrado. El ciclo procedimental de validación se divide en dos fases ejecutadas por la suite de software:
@@ -417,53 +443,9 @@ El control operativo del flujo de verificación se automatizó mediante el desar
     
     \item \textbf{Fase de Recolección (\texttt{debug\_axi.py}):} Una vez que la prueba ha transcurrido, esta rutina realiza lecturas secuenciales sobre la dirección base del periférico \texttt{0x43C00000} (AXI Reporter). El script extrae la parte baja y alta del contador de $64\text{ bits}$ correspondientes a cada evento interceptado, junto con el identificador de registro, y los procesa en espacio de usuario para generar los reportes de trazabilidad de tiempo real exportables a formatos estándar de análisis técnico.
 
-    \item \textbf{Diagnóstico de Arbitraje y Exclusión (\texttt{debug\_axi.py}):} 
-    Herramienta enfocada estrictamente en probar la eficacia del multiplexor de seguridad por hardware. El script manipula la señal de reinicio para congelar al núcleo Ibex e inyecta una palabra de prueba en la memoria BRAM (e.g., \texttt{0xDEADBEEF}), asumiendo el control exclusivo del bus. Esta prueba empírica demuestra que el ARM posee privilegios de lectura/escritura únicamente cuando el SUT está detenido, validando así la protección contra colisiones de datos.
-
     \item \textbf{Validación Integral y Trazabilidad (\texttt{test\_bus.py}):} 
     Representa el ensayo más robusto y automatizado de la arquitectura. Este script mapea simultáneamente la memoria BRAM, el controlador GPIO y el Módulo Reporter. Su flujo operativo permite inyectar un \textit{firmware} de prueba en lenguaje ensamblador RISC-V directamente en el silicio, efectuar el disparo por hardware del Ibex, y realizar lecturas secuenciales sobre la dirección base del periférico \texttt{0x43C00000} (AXI Reporter). Finalmente, el script extrae la parte baja y alta del contador de $64\text{ bits}$ correspondientes a cada evento interceptado y los procesa en el espacio de usuario, generando reportes de trazabilidad en tiempo real listos para su exportación y análisis técnico.
 
+En el capítulo \ref{ch:resultados} se implementan scripts específicos destinados a abordar la hipótesis principal y a resolver los problemas identificados durante el desarrollo de estos primeros ensayos.
 \end{enumerate}
 
-\subsubsection{Conclusiones y Limitaciones de la Arquitectura}
-\label{sssec:conclusion_arquitectura}
-
-El análisis derivado de la ejecución del ecosistema de scripts permitió validar, en un entorno de pruebas real, el comportamiento integral de la arquitectura HR-RT-Reporter. Se comprobó exitosamente la interoperabilidad entre el Sistema de Procesamiento (PS) y la Lógica Programable (PL) a través de la red de interconexión AXI, así como la efectividad del multiplexor de exclusión mutua en hardware. Sin embargo, la etapa de integración también expuso las siguientes limitaciones inherentes al diseño de la plataforma experimental:
-
-\begin{enumerate}
-    \item \textbf{Capacidad de Almacenamiento Restringida (BRAM):} Para garantizar un determinismo estricto temporal y una baja latencia (accesos en un solo ciclo de reloj de $20\text{ ns}$), el Sistema Bajo Prueba (SUT) opera exclusivamente sobre la memoria interna de la FPGA. Al estar la BRAM dimensionada en $8\text{ KiB}$ ($2048$ celdas de $32\text{ bits}$), existe una limitación rígida sobre la huella de memoria (\textit{memory footprint}) de los algoritmos de control que pueden ser ensayados. El núcleo Ibex carece de acceso a la memoria externa DDR3 para preservar su aislamiento físico.
-    
-    \item \textbf{Dependencia de Instrumentación Explícita:} Aunque la arquitectura logra mitigar exitosamente el ``efecto sonda`` al eliminar las penalizaciones por bloqueos de bus o interrupciones del sistema operativo, el mecanismo de captura de eventos sigue requiriendo que el código fuente (C/C++) sea instrumentado. El programa debe ejecutar explícitamente una instrucción de almacenamiento (\texttt{sw}) hacia la dirección virtual \texttt{0x80000000}. Esto implica que el binario ensayado difiere ligeramente del binario final de producción, lo cual es una concesión arquitectónica.
-
-    \end{enumerate}
-
-
-    A continuacion el diagrama en bloques:
-    \begin{figure}[htbp]
-    \centering
-    \includegraphics[width=\textwidth*1,3]{figs/design_3_recortado.pdf}
-    
-    \caption{Diagrama de bloques general (\textit{Block Design}) sintetizado en AMD Vivado para la arquitectura heterogénea HR-RT-Reporter.}
-    \label{fig:vivado_block_design}
-\end{figure}
-La Figura \ref{fig:vivado_block_design} ilustra la topología completa del diseño por bloques (\textit{Block Design}) implementado en el entorno AMD Vivado. En ella se aprecia la integración física entre el Sistema de Procesamiento (\textit{Processing System} - PS) y los periféricos instanciados en el tejido de la Lógica Programable (\textit{Programmable Logic} - PL).
-
-A nivel microarquitectónico, el esquema se articula a través de los siguientes bloques e interfaces funcionales fundamentales:
-
-\begin{itemize}
-    \item \textbf{Procesador Maestro (\texttt{processing\_system7\_0}):} Representa el bloque duro Zynq-7000 PS. Exporta la interfaz maestra de propósito general AXI4-Lite (\texttt{M\_AXI\_GP0}), desde la cual el sistema operativo Linux gobierna la totalidad de los periféricos esclavos en la PL.
-    
-    \item \textbf{Red de Interconexión AXI (\texttt{ps7\_0\_axi\_periph}):} Actúa como la matriz de conmutación y arbitraje (\textit{AXI Interconnect}). Recibe las peticiones del procesador ARM y las rutea hacia las direcciones físicas de los esclavos mapeados (\texttt{axi\_bram\_ctrl\_0}, \texttt{axi\_gpio\_0}, \texttt{axi\_gpio\_1} y \texttt{axi\_reporter\_0}).
-
-    \item \textbf{Controlador de Memoria (\texttt{axi\_bram\_ctrl\_0}):} Mapeado en la dirección \texttt{0x40000000}, proporciona la interfaz de conversión entre el protocolo AXI4-Lite del ARM y los buses nativos de la memoria BRAM del subsistema Ibex.
-
-    \item \textbf{Gatillo de Reset y Diagnóstico (\texttt{axi\_gpio\_0} y \texttt{axi\_gpio\_1}):}
-    \begin{itemize}
-        \item \texttt{axi\_gpio\_0} (\texttt{0x41200000}): Canal AXI GPIO de 1 bit cuya salida controla directamente la línea física de reinicio activo en bajo (\texttt{rst\_ni}) del subsistema RISC-V, funcionando como el disparador del experimento controlado desde Linux.
-        \item \texttt{axi\_gpio\_1} (\texttt{0x41210000}): Canal de 4 bits acoplado a los diodos emisores de luz (LEDs) de la placa Zybo para la verificación visual del estado operativo del hardware.
-    \end{itemize}
-
-    \item \textbf{Subsistema RISC-V Encapsulado (\texttt{ibex\_bram\_wrapper\_bd\_0}):} Módulo envoltorio que aloja al procesador soft-core Ibex, la memoria BRAM de $8\text{ KiB}$ en modo \textit{True Dual Port} y el multiplexor de exclusión mutua en hardware. Este bloque aísla la complejidad interna del procesador RISC-V expuesta hacia el lienzo gráfico de Vivado.
-
-    \item \textbf{Módulo de Trazabilidad (\texttt{axi\_reporter\_0}):} Periférico personalizado mapeado en la dirección \texttt{0x43C00000}. Contiene el contador de alta resolución a $50\text{ MHz}$ ($20\text{ ns}$) y la lógica de intercepción pasiva que captura marcas temporales ante accesos a la dirección virtual de frontera \texttt{0x80000000} sin introducir penalizaciones por contención de buses.
-\end{itemize}

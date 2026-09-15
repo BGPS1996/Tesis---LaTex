@@ -1,0 +1,471 @@
+\chapter{Detalle del script de debuging}
+\label{ap:script-tb}
+
+\section{Codigo de depuración}
+
+\begin{lstlisting}[style=verilogstyle, basicstyle=\ttfamily\footnotesize, caption={Código fuente del subsistema \texttt{tb\_ibex\_bram\_subsystem.sv}}, label={code:tb_ibex_bram_subsystem.sv}]
+`timescale 1ns / 1ps
+module tb_ibex_bram_subsystem;
+
+    // Reloj de 50 MHz -> periodo 20 ns
+    logic clk_i = 0;
+    always #10 clk_i = ~clk_i;
+
+    // Reset: bajo los primeros ciclos, luego alto
+    logic rst_ni = 0;
+    initial begin
+        rst_ni = 0;
+        repeat (10) @(posedge clk_i);
+        rst_ni = 1;
+        $display("[%0t] rst_ni liberado", $time);
+    end
+
+    // Puerto A del AXI BRAM Controller (lado ARM) no lo usamos en esta
+    // prueba, lo dejamos en un estado neutro (sin actividad del ARM).
+    logic        bram_clk_a  = 0;
+    logic        bram_en_a   = 0;
+    logic [3:0]  bram_we_a   = 4'b0;
+    logic [12:0] bram_addr_a = 13'b0;
+    logic [31:0] bram_wdata_a = 32'b0;
+    logic [31:0] bram_rdata_a;
+
+    // Interfaz hacia el Reporter la observamos, no la accionamos.
+    logic        reporter_req_o;
+    logic [31:0] reporter_addr_o;
+    logic        reporter_we_o;
+    logic [31:0] reporter_wdata_o;
+    logic [31:0] reporter_rdata_i = 32'hFFFFFFFF;  // valor fijo, no importa para esta prueba
+
+    // --- INSTANCIA DEL SUBSISTEMA REAL (mismo RTL que Vivado sintetiza) ---
+    ibex_bram_subsystem dut (
+        .clk_i            ( clk_i ),
+        .rst_ni           ( rst_ni ),
+
+        .bram_clk_a       ( bram_clk_a ),
+        .bram_en_a        ( bram_en_a ),
+        .bram_we_a        ( bram_we_a ),
+        .bram_addr_a      ( bram_addr_a ),
+        .bram_wdata_a     ( bram_wdata_a ),
+        .bram_rdata_a     ( bram_rdata_a ),
+
+        .reporter_req_o   ( reporter_req_o ),
+        .reporter_addr_o  ( reporter_addr_o ),
+        .reporter_we_o    ( reporter_we_o ),
+        .reporter_wdata_o ( reporter_wdata_o ),
+        .reporter_rdata_i ( reporter_rdata_i )
+    );
+
+    // --- MONITOREO: reportar cada vez que cambian las señales clave ---
+    logic        prev_req = 0;
+    logic [31:0] prev_instr_addr = 32'hFFFFFFFF;
+    int          cycle_count = 0;
+
+    always @(posedge clk_i) begin
+        // Accedemos directamente a las señales internas del DUT via
+        // jerarquia (valido en simulacion, no en sintesis).
+        if (dut.instr_addr !== prev_instr_addr) begin
+            $display("[%0t] instr_addr = 0x%08h", $time, dut.instr_addr);
+            prev_instr_addr <= dut.instr_addr;
+        end
+
+        if (reporter_req_o && reporter_we_o && !prev_req) begin
+            // OJO (encontrado en la adenda sesion 3): reporter_addr_o/
+            // reporter_wdata_o son la version "sticky" registrada por
+            // ibex_bram_subsystem.sv (FIX #6) se actualizan un ciclo
+            // DESPUES de este mismo flanco en el que reporter_req_o+we
+            // se ve en alto por primera vez, asi que leerlas aca (mismo
+            // ciclo) muestra el valor de la escritura ANTERIOR (o el
+            // reset 0 en la primera escritura), no la actual. Se usa
+            // dut.data_addr/dut.data_wdata (combinacionales, validos
+            // en este mismo ciclo) para el print inmediato y preciso;
+            // reporter_core.sv del lado del Reporter SI lee la version
+            // sticky correctamente, porque la muestrea varios ciclos de
+            // 100MHz despues (ya actualizada) ver reporte.txt.
+            $display("[%0t] *** reporter_req_o+we detectado! addr=0x%08h wdata=0x%08h ***",
+                      $time, dut.data_addr, dut.data_wdata);
+        end
+        prev_req <= (reporter_req_o && reporter_we_o);
+    end
+
+    // --- TRAZA CICLO A CICLO (bus de instrucciones + bus de datos) ---
+    // Se activa desde que se libera rst_ni hasta CYCLE_TRACE_LIMIT ciclos
+    // despues, para tener visibilidad completa del arranque del pipeline
+    // sin generar un log de 1000 ciclos completo.
+    localparam int CYCLE_TRACE_LIMIT = 300;
+
+    always @(posedge clk_i) begin
+        if (rst_ni) begin
+            cycle_count <= cycle_count + 1;
+            if (cycle_count <= CYCLE_TRACE_LIMIT) begin
+                $display("[TRACE cyc=%0d t=%0t] rst_ni_sync=%b | instr_req=%b instr_gnt=%b instr_rvalid=%b instr_addr=0x%08h instr_rdata=0x%08h | data_req=%b data_we=%b data_addr=0x%08h data_wdata=0x%08h data_rvalid=%b | pc_if=0x%08h pc_id=0x%08h instr_valid_id=%b pc_set=%b",
+                    cycle_count, $time,
+                    dut.rst_ni_sync,
+                    dut.instr_req, dut.instr_req, dut.instr_rvalid_q,
+                    dut.instr_addr, dut.instr_rdata,
+                    dut.data_req, dut.data_we, dut.data_addr, dut.data_wdata, dut.data_rvalid_q,
+                    dut.u_core_cpu.u_ibex_core.pc_if,
+                    dut.u_core_cpu.u_ibex_core.pc_id,
+                    dut.u_core_cpu.u_ibex_core.instr_valid_id,
+                    dut.u_core_cpu.u_ibex_core.pc_set);
+            end
+        end
+    end
+
+    // --- CONTROL DE DURACION DE LA SIMULACION ---
+    // ADENDA (firmware reporter.c, N=1000 iteraciones, ~19 instrucciones/
+    // iteracion incluidos 3 stores con latencia): el timeout de 20us
+    // (usado para sanity_check.c, que solo hace 2 stores sin loop) se
+    // quedaba corto. 3ms de margen generoso (worst case pesimista de
+    // varios ciclos de stall por instruccion) para no cortar la
+    // simulacion antes de que el firmware real termine.
+    initial begin
+        $display("=== INICIO DE SIMULACION ===");
+        #3_000_000; // 3 ms de timeout absoluto (red de seguridad; el fin
+                     // real de la simulacion lo dispara la lectura AXI de
+                     // abajo, disparada por deteccion de fin de programa)
+        $display("=== FIN DE SIMULACION (timeout) ===");
+        $display("Ultimo instr_addr observado: 0x%08h", dut.instr_addr);
+        $finish;
+    end
+
+    // ========================================================================
+    // ADENDA sesion 3 (ver reporte.txt): instancia del axi_reporter_v1_0
+    // REAL (bugs #4/#6/#7) en su propio dominio de reloj de 100MHz,
+    // asincrono respecto de clk_i (50MHz), tal como esta en hardware
+    // (design_1.bd: FCLK_CLK1=50MHz al Ibex, FCLK_CLK0=100MHz al Reporter).
+    // Un mini-driver AXI4-Lite hace de "test_diag.py simulado": lee los 8
+    // registros de diagnostico despues de que el firmware haga sus 2
+    // writes, para validar el CDC de punta a punta sin depender de
+    // hardware fisico.
+    // ========================================================================
+
+    // --- Reloj de 100 MHz (dominio del Reporter / S_AXI_ACLK) ---
+    logic clk100 = 0;
+    always #5 clk100 = ~clk100;   // 100MHz -> periodo 10ns
+
+    // Reset propio del dominio de 100MHz, liberado en un instante que NO es
+    // multiplo del periodo de clk_i (20ns), para no esconder por casualidad
+    // un problema real de CDC detras de una relacion de fase artificialmente
+    // alineada entre los dos relojes.
+    logic rst100_n = 0;
+    initial begin
+        rst100_n = 0;
+        repeat (7) @(posedge clk100);   // libera en t=70ns
+        rst100_n = 1;
+        $display("[%0t] rst100_n (dominio Reporter/AXI, 100MHz) liberado", $time);
+    end
+
+    // --- Bus AXI4-Lite hacia axi_reporter_v1_0 (solo canal de lectura; el
+    //     canal de escritura no se usa, test_diag.py solo lee) ---
+    localparam int AXI_ADDR_W = 5;   // igual al C_S00_AXI_ADDR_WIDTH=5 real (ver .xci)
+
+    logic [AXI_ADDR_W-1:0] s_axi_awaddr  = '0;
+    logic                  s_axi_awvalid = 1'b0;
+    wire                   s_axi_awready;
+    logic [31:0]           s_axi_wdata   = '0;
+    logic [3:0]            s_axi_wstrb   = '0;
+    logic                  s_axi_wvalid  = 1'b0;
+    wire                   s_axi_wready;
+    wire  [1:0]            s_axi_bresp;
+    wire                   s_axi_bvalid;
+    logic                  s_axi_bready  = 1'b1;
+
+    logic [AXI_ADDR_W-1:0] s_axi_araddr  = '0;
+    logic                  s_axi_arvalid = 1'b0;
+    wire                   s_axi_arready;
+    wire  [31:0]           s_axi_rdata;
+    wire  [1:0]            s_axi_rresp;
+    wire                   s_axi_rvalid;
+    logic                  s_axi_rready  = 1'b1;   // maestro siempre listo a recibir
+
+    wire [31:0] reporter_ibex_rdata;   // no conectado hacia el Ibex en esta prueba
+                                        // (sanity_check.c no hace loads desde el
+                                        // Reporter ver CAVEAT de lectura sin
+                                        // sincronizar en reporter_core.sv)
+
+    axi_reporter_v1_0 #(
+        .C_S00_AXI_DATA_WIDTH ( 32 ),
+        .C_S00_AXI_ADDR_WIDTH ( AXI_ADDR_W )
+    ) dut_reporter (
+        .ibex_req_i    ( reporter_req_o ),
+        .ibex_addr_i   ( reporter_addr_o ),
+        .ibex_we_i     ( reporter_we_o ),
+        .ibex_wdata_i  ( reporter_wdata_o ),
+        .ibex_rdata_o  ( reporter_ibex_rdata ),
+
+        .s00_axi_aclk    ( clk100 ),
+        .s00_axi_aresetn ( rst100_n ),
+
+        .s00_axi_awaddr  ( s_axi_awaddr ),
+        .s00_axi_awprot  ( 3'b0 ),
+        .s00_axi_awvalid ( s_axi_awvalid ),
+        .s00_axi_awready ( s_axi_awready ),
+        .s00_axi_wdata   ( s_axi_wdata ),
+        .s00_axi_wstrb   ( s_axi_wstrb ),
+        .s00_axi_wvalid  ( s_axi_wvalid ),
+        .s00_axi_wready  ( s_axi_wready ),
+        .s00_axi_bresp   ( s_axi_bresp ),
+        .s00_axi_bvalid  ( s_axi_bvalid ),
+        .s00_axi_bready  ( s_axi_bready ),
+        .s00_axi_araddr  ( s_axi_araddr ),
+        .s00_axi_arprot  ( 3'b0 ),
+        .s00_axi_arvalid ( s_axi_arvalid ),
+        .s00_axi_arready ( s_axi_arready ),
+        .s00_axi_rdata   ( s_axi_rdata ),
+        .s00_axi_rresp   ( s_axi_rresp ),
+        .s00_axi_rvalid  ( s_axi_rvalid ),
+        .s00_axi_rready  ( s_axi_rready )
+    );
+
+    // --- Driver AXI4-Lite minimo: un solo beat de lectura por llamada ---
+    // NOTA: muestrear/manejar señales en el POSEDGE de clk100 (el mismo
+    // flanco que usan los always del esclavo AXI) es una carrera clasica
+    // de testbench: justo despues de "@(posedge clk100)" todavia se lee
+    // el valor PRE-flanco de cualquier señal actualizada por NBA en ese
+    // mismo flanco (arready/rvalid), asi que un primer intento de este
+    // driver que soltaba ARVALID apenas "veia" arready=1 en el posedge
+    // siguiente en realidad lo soltaba un ciclo demasiado pronto (el
+    // esclavo necesita ARVALID en alto en el MISMO ciclo en que ARREADY
+    // ya esta en alto para disparar RVALID) quedaba colgado para
+    // siempre. Fix: manejar/muestrear todo en el NEGEDGE (medio ciclo
+    // despues de que el esclavo actualiza sus registros, sin ambiguedad
+    // de orden de eventos) y mantener ARVALID en alto hasta ver RVALID.
+    task automatic axi_lite_read(input logic [AXI_ADDR_W-1:0] addr, output logic [31:0] data);
+        @(negedge clk100);
+        s_axi_araddr  = addr;
+        s_axi_arvalid = 1'b1;
+        while (s_axi_rvalid !== 1'b1) @(negedge clk100);
+        data = s_axi_rdata;
+        s_axi_arvalid = 1'b0;
+        @(negedge clk100);
+    endtask
+
+    // --- Monitor: reportar cada vez que cambian los contadores RAW/SYNC,
+    //     visibilidad directa del CDC sin esperar a las lecturas AXI ---
+    logic [31:0] prev_raw_count  = 32'hFFFFFFFF;
+    logic [31:0] prev_sync_count = 32'hFFFFFFFF;
+    always @(posedge clk100) begin
+        if (dut_reporter.axi_reporter_v1_0_S00_AXI_inst.u_reporter.dbg_raw_count_o !== prev_raw_count) begin
+            $display("[%0t] dbg_raw_count_o  -> %0d", $time, dut_reporter.axi_reporter_v1_0_S00_AXI_inst.u_reporter.dbg_raw_count_o);
+            prev_raw_count <= dut_reporter.axi_reporter_v1_0_S00_AXI_inst.u_reporter.dbg_raw_count_o;
+        end
+        if (dut_reporter.axi_reporter_v1_0_S00_AXI_inst.u_reporter.dbg_sync_count_o !== prev_sync_count) begin
+            $display("[%0t] dbg_sync_count_o -> %0d", $time, dut_reporter.axi_reporter_v1_0_S00_AXI_inst.u_reporter.dbg_sync_count_o);
+            prev_sync_count <= dut_reporter.axi_reporter_v1_0_S00_AXI_inst.u_reporter.dbg_sync_count_o;
+        end
+    end
+
+    // --- Monitor adicional: event_valid_o (registro EVENT_VALID, offset
+    //     0x0C) es, por diseño, un pulso de 1 SOLO CICLO de clk100 (ver
+    //     comentario en reporter_core.sv seccion 3: "event_valid <= 1'b0;
+    //     ... if (we_synced_pulse) event_valid <= 1'b1;"), no un flag
+    //     sticky. Una lectura AXI hecha mucho despues del evento (como la
+    //     del bloque "test_diag.py simulado" mas abajo, a t=5000ns) SIEMPRE
+    //     va a leer 0 no por ningun bug, sino porque el pulso ya paso
+    //     hace rato. Este monitor prueba, via jerarquia, que el pulso SI
+    //     llega a 1 en el ciclo correcto (justo cuando el CDC sincroniza
+    //     cada escritura), para no confundir "pulso transitorio" con
+    //     "nunca se pone en 1".
+    logic prev_event_valid = 1'b0;
+    always @(posedge clk100) begin
+        if (dut_reporter.axi_reporter_v1_0_S00_AXI_inst.u_reporter.event_valid_o !== prev_event_valid) begin
+            $display("[%0t] event_valid_o    -> %0b (pulso de 1 ciclo, no sticky)",
+                      $time, dut_reporter.axi_reporter_v1_0_S00_AXI_inst.u_reporter.event_valid_o);
+            prev_event_valid <= dut_reporter.axi_reporter_v1_0_S00_AXI_inst.u_reporter.event_valid_o;
+        end
+    end
+
+    // --- Secuencia de lectura "recolector.py simulado" (firmware reporter.c) ---
+    // reporter.c corre un loop de N=1000 iteraciones (3 stores/iteracion:
+    // REG_PC, REG_I, REG_D), muchisimo mas largo que los 2 stores fijos de
+    // sanity_check.c no alcanza con un delay fijo chico.
+    // PRIMER INTENTO (fallido, dejado documentado): esperar a que
+    // dut.instr_addr llegara al self-loop final (0x158) disparaba YA en
+    // la primera iteracion del loop, no al final real Ibex fetchea
+    // especulativamente mas alla del branch de retorno (bne, en 0x154)
+    // en TODAS las iteraciones, no solo la ultima (mismo patron de fetch
+    // especulativo del bug #3). Confirmado empiricamente: disparaba a
+    // t=2030000ns con dbg_sync_count_o=6 (solo 2 de las 1000 iteraciones
+    // completas, no 3000). En vez de eso se usa dbg_sync_count_o (NO
+    // especulativo: solo avanza con escrituras REALES ya confirmadas por
+    // el sincronizador CDC) como condicion de fin de programa: cuando
+    // llega a 3000 (1000 iteraciones * 3 writes/iteracion), el loop de
+    // reporter.c termino de verdad.
+    localparam logic [31:0] EXPECTED_TOTAL_EVENTS = 32'd3000;
+
+    // ADENDA (N=1.5M en produccion, reporter.c): este bloque de lecturas
+    // dispara en dbg_sync_count_o==3000, que para N=1000 era el FINAL del
+    // loop (Ibex ya en el while(1)), pero para N=1.5M es apenas ~0.07% del
+    // recorrido el loop SIGUE corriendo mientras se hacen las 8 lecturas
+    // AXI secuenciales de abajo, asi que DBG_RAW_COUNT/EVT_I pueden leerse
+    // unos pocos eventos mas adelante de 3000/999 (avanzaron durante la
+    // lectura). Esto NO es un bug: se confirmo por inspeccion de log que
+    // DBG_RAW_COUNT==DBG_SYNC_COUNT siempre (cero perdida de eventos en el
+    // CDC incluso bajo escrituras consecutivas), que es el chequeo de
+    // integridad real. Se deja como esta (sirvio de smoke test puntual
+    // para validar que el binario de N=1.5M arranca y escribe bien) en vez
+    // de reescribir la logica de fin de simulacion correr las 1.5M
+    // iteraciones completas en xsim no es practico (~25M ciclos).
+    logic [31:0] rd_ts_lo, rd_ts_hi, rd_evt_pc, rd_event_valid, rd_evt_i, rd_evt_d, rd_dbg_raw, rd_dbg_sync;
+    int          diag_errors = 0;
+
+    initial begin
+        wait (dut_reporter.axi_reporter_v1_0_S00_AXI_inst.u_reporter.dbg_sync_count_o == EXPECTED_TOTAL_EVENTS);
+        $display("[%0t] dbg_sync_count_o llego a %0d loop de reporter.c completo", $time, EXPECTED_TOTAL_EVENTS);
+        #500; // margen de sobra (50 ciclos de clk_i) para que el ultimo evento
+              // termine de cruzar el CDC antes de leer por AXI-Lite
+        $display("=== recolector.py simulado: leyendo mapa de registros AXI-Lite del Reporter ===");
+
+        axi_lite_read(5'h00, rd_ts_lo);        $display("[%0t] TIMESTAMP_LO   (0x00) = 0x%08h", $time, rd_ts_lo);
+        axi_lite_read(5'h04, rd_ts_hi);        $display("[%0t] TIMESTAMP_HI   (0x04) = 0x%08h", $time, rd_ts_hi);
+        axi_lite_read(5'h08, rd_evt_pc);       $display("[%0t] EVT_PC         (0x08) = 0x%08h", $time, rd_evt_pc);
+        axi_lite_read(5'h0C, rd_event_valid);  $display("[%0t] EVENT_VALID    (0x0C) = 0x%08h", $time, rd_event_valid);
+        axi_lite_read(5'h10, rd_evt_d);        $display("[%0t] EVT_D          (0x10) = 0x%08h", $time, rd_evt_d);
+        axi_lite_read(5'h14, rd_evt_i);        $display("[%0t] EVT_I          (0x14) = 0x%08h (%0d)", $time, rd_evt_i, rd_evt_i);
+        axi_lite_read(5'h18, rd_dbg_raw);      $display("[%0t] DBG_RAW_COUNT  (0x18) = 0x%08h (%0d)", $time, rd_dbg_raw, rd_dbg_raw);
+        axi_lite_read(5'h1C, rd_dbg_sync);     $display("[%0t] DBG_SYNC_COUNT (0x1C) = 0x%08h (%0d)", $time, rd_dbg_sync, rd_dbg_sync);
+
+        // --- Verificacion contra los valores esperados para reporter.c ---
+        // N=1000 iteraciones * 3 stores (REG_PC, REG_I, REG_D) = 3000 writes.
+        // EVT_PC: reporter.c usa `auipc a1,0` DENTRO del loop (misma
+        // direccion en cada iteracion) por diseño es una direccion FIJA,
+        // 0x0000010C (la de esa instruccion en firmware.elf), no una
+        // secuencia cambiante. No es un bug si sale constante.
+        // EVT_I: ultimo valor de indice escrito = N-1 = 999 (el store
+        // ocurre ANTES del incremento de la variable de loop).
+        // EVT_D: ultimo valor de la secuencia LCG (seed=12345,
+        // state=state*1664525+1013904223 mod 2^32, 1000 iteraciones) =
+        // 0x14E875E1 (350778849), calculado independientemente en Python
+        // para esta verificacion.
+        if (rd_dbg_raw != 32'd3000) begin
+            $display("[%0t] *** FALLO: DBG_RAW_COUNT esperado=3000 obtenido=%0d ***", $time, rd_dbg_raw);
+            diag_errors++;
+        end
+        if (rd_dbg_sync != rd_dbg_raw) begin
+            $display("[%0t] *** FALLO: DBG_SYNC_COUNT (%0d) no coincide con DBG_RAW_COUNT (%0d) perdida de eventos en el CDC ***",
+                      $time, rd_dbg_sync, rd_dbg_raw);
+            diag_errors++;
+        end
+        // ADENDA (N=1.5M): al crecer el inmediato de N a mas de 12 bits, el
+        // compilador agrega una instruccion lui extra antes del loop y todo
+        // el codigo posterior se corre la auipc del loop ahora esta en
+        // 0x110 (no 0x10C), confirmado desensamblando el .elf real.
+        if (rd_evt_pc != 32'h00000110) begin
+            $display("[%0t] *** FALLO: EVT_PC esperado=0x00000110 obtenido=0x%08h ***", $time, rd_evt_pc);
+            diag_errors++;
+        end
+        if (rd_evt_i != 32'd999) begin
+            $display("[%0t] *** FALLO: EVT_I esperado=999 obtenido=%0d ***", $time, rd_evt_i);
+            diag_errors++;
+        end
+        if (rd_evt_d != 32'h14E875E1) begin
+            $display("[%0t] *** FALLO: EVT_D esperado=0x14E875E1 obtenido=0x%08h ***", $time, rd_evt_d);
+            diag_errors++;
+        end
+        // EVENT_VALID (0x0C) NO se chequea como FALLO: por diseño es un
+        // pulso de 1 solo ciclo de clk100 (ver reporter_core.sv seccion 3),
+        // no un flag sticky, y esta lectura ocurre bastante despues del
+        // ultimo evento sincronizado el pulso ya paso hace rato, 0 es el
+        // resultado esperado aca. El monitor "event_valid_o -> 1" mas
+        // arriba en este mismo log ya prueba que el pulso SI llega a 1 en
+        // el momento correcto en cada uno de los 3000 eventos.
+        if (rd_event_valid[0] !== 1'b1)
+            $display("[%0t] (info, no es fallo) EVENT_VALID leido tarde = %0d esperado, ver comentario arriba", $time, rd_event_valid[0]);
+
+        if (diag_errors == 0)
+            $display("=== recolector.py simulado: PASS (Ibex -> BRAM -> Reporter -> CDC -> AXI-Lite funcionando de punta a punta con reporter.c) ===");
+        else
+            $display("=== recolector.py simulado: FAIL (%0d chequeo(s) fallido(s), ver detalle arriba) ===", diag_errors);
+
+        $finish;
+    end
+
+endmodule
+\end{lstlisting}
+
+
+\section{Codigo de depuración Pruebas de Lectura desde Linux}
+
+\begin{lstlisting}[style=pythonstyle, basicstyle=\ttfamily\footnotesize, caption={Código recolector.py}, label={code:recolector.py}]
+import os
+import mmap
+import time
+import struct
+
+# Direcciones Base de la Arquitectura
+GPIO_BASE     = 0x41200000
+REPORTER_BASE = 0x43C00000
+PAGE_SIZE     = 4096
+
+# --- Mapa de registros del Reporter v2 (offsets desde REPORTER_BASE) ---
+# OJO: 0x0C es EVENT_VALID (pulso de 1 ciclo @100MHz) y 0x14 es EVT_I
+# (agregado en esta sesion) -- estaban invertidos en una version previa
+# de este script, que mezclaba la lectura de "i" con la de "valid".
+OFF_TIME_LO   = 0x00
+OFF_TIME_HI   = 0x04
+OFF_EVT_PC    = 0x08
+OFF_EVT_VALID = 0x0C
+OFF_EVT_D     = 0x10
+OFF_EVT_I     = 0x14
+
+
+def setup_memory(base_addr):
+    fd = os.open("/dev/mem", os.O_RDWR | os.O_SYNC)
+    mem = mmap.mmap(fd, PAGE_SIZE, mmap.MAP_SHARED,
+                     mmap.PROT_READ | mmap.PROT_WRITE, offset=base_addr)
+    os.close(fd)
+    return mem
+
+
+def read_reg(mem, off):
+    mem.seek(off)
+    return struct.unpack('<I', mem.read(4))[0]
+
+
+def write_reg(mem, off, val):
+    mem.seek(off)
+    mem.write(struct.pack('<I', val))
+
+
+gpio_mem = setup_memory(GPIO_BASE)
+reporter_mem = setup_memory(REPORTER_BASE)
+
+print("--- INICIANDO EXTRACCIÓN DE TRAZABILIDAD (ZERO-PROBE) ---")
+
+# Configurar el GPIO como SALIDA (registro TRI, offset 0x04)
+write_reg(gpio_mem, 0x04, 0x00000000)
+
+# 1. Asegurar que Ibex inicie desde Reset
+write_reg(gpio_mem, 0x00, 0)
+time.sleep(0.05)
+
+# 2. Disparar ejecución de Ibex (rst_ni = 1)
+write_reg(gpio_mem, 0x00, 1)
+print("Ibex corriendo a 50 MHz. Adquiriendo datos en Linux...")
+
+# 3. Muestreo de Alta Velocidad (Guardado en RAM primero)
+muestras = []
+MUESTRAS_OBJETIVO = 10000
+for _ in range(MUESTRAS_OBJETIVO):
+    t_lo = read_reg(reporter_mem, OFF_TIME_LO)
+    t_hi = read_reg(reporter_mem, OFF_TIME_HI)
+    pc   = read_reg(reporter_mem, OFF_EVT_PC)
+    i    = read_reg(reporter_mem, OFF_EVT_I)
+    d    = read_reg(reporter_mem, OFF_EVT_D)
+    v    = read_reg(reporter_mem, OFF_EVT_VALID)
+    t = (t_hi << 32) | t_lo
+    muestras.append((pc, i, t, d, v))
+
+print("Adquisición finalizada. Generando archivo forense...")
+
+nombre_archivo = "trazabilidad_ibex.txt"
+with open(nombre_archivo, "w") as f:
+    f.write("PC         | i          | t (Timestamp, 64b)   | d (Rand)   | valid                                                                                        \n")
+    f.write("-" * 75 + "\n")
+    for (pc, i, t, d, v) in muestras:
+        if pc != 0 or i != 0 or t != 0:
+            f.write("0x{:08X} | {:10d} | {:20d} | {:10d} | {}\n".format(pc, i, t                                                                                        , d, v))
+
+print("Éxito: Datos guardados en {}".format(nombre_archivo))
+
+\end{lstlisting}

@@ -38,7 +38,16 @@ showstringspaces=false,
 frame=none,
 numbers=none
 }
-
+\lstdefinestyle{powershellstyle}{
+    language=bash,
+    backgroundcolor=\color{blue!80!black},
+    basicstyle=\ttfamily\color{white}\small,
+    breaklines=true,
+    showstringspaces=false,
+    xtranumbers=none,
+    frame=none,
+    numbers=none
+}
 \lstdefinestyle{verilogstyle}{
     language=Verilog,
     basicstyle=\ttfamily\footnotesize,
@@ -146,8 +155,6 @@ numbers=none
     this,
     super
 }}
-
-
 \lstdefinestyle{xdcstyle}{
     language=tcl,
     basicstyle=\ttfamily\footnotesize,
@@ -227,20 +234,34 @@ numbers=none
     frame=none,
     breaklines=false
 }
+\lstdefinestyle{pythonstyle}{
+    language=Python,
+    basicstyle=\ttfamily\footnotesize,
+    keywordstyle=\color{blue},
+    stringstyle=\color{red},
+    commentstyle=\color{green!40!black},
+    showstringspaces=false,
+    breaklines=true,
+    frame=single,
+    numbers=left,
+    numberstyle=\tiny,
+    stepnumber=1,
+    numbersep=5pt
+}
+
 \begin{document}
 
 % Dentro del environment 'preliminary' va:
 % la dedicatoria, resumen, abstract, indices
 
-%\begin{preliminary}
+\begin{preliminary}
 
-% Escriba su dedicatoria
-%\dedicatoria{
-%A mi familia\\
-%A mis amigos\\
-%A todos los que me conocen\\
-%A toda esa otra gente que no
-%}
+\dedicatoria{
+A mi familia\\
+A mis amigos\\
+A todos los que me conocen\\
+A toda esa otra gente que no
+}
 
 %%% \'{I}ndices %%%%
 
@@ -253,15 +274,15 @@ numbers=none
 
 \tableofcontents                %\'{I}ndice
 
-%\listoffigures                  %Figuras
+\listoffigures                  %Figuras
 
-%\listoftables                   %Tablas
+\listoftables                   %Tablas
 
-%\lstlistoflistings              %Codigos
+\lstlistoflistings              %Codigos
 
 %\include{resumen}
 
-%\end{preliminary}
+\end{preliminary}
 
 
 % Podemos usar cualquiera de los dos comandos: \input o \include para incluir el texto
@@ -270,14 +291,17 @@ numbers=none
 \include{cap3}
 \include{cap4}
 \include{cap5}
+\include{cap6}
 
 \appendix
 \include{apend1}
 \include{apend2_tablas}
+\include{apend3_codTB}
+\include{apend4}
 
-%\begin{biblio}
-%\bibliography{mibib,bibdatabase}
-%\end{biblio}
+\begin{biblio}
+\bibliography{mibib,bibdatabase}
+\end{biblio}
 
 %\begin{postliminary}
 
